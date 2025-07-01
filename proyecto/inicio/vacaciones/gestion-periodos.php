@@ -1,7 +1,6 @@
 <?php
 session_start();
 require '../conexion.php';
-require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
 
 $errores = [];
 $datos_empleado = null;
