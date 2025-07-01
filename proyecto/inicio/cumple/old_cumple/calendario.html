@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang='es'>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>Cumpleaños del Personal</title>
+    
+    <!-- Dependencias CSS -->
+    <link href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css' rel='stylesheet'>
+    <link href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css' rel='stylesheet'>
+    <link href='https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css' rel='stylesheet'>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Estilos personalizados -->
+<style>
+:root {
+    --primary-color: #e83e8c;
+    --secondary-color: #6f42c1;
+    --today-color: #28a745;
+    --font-title: 'Inter', system-ui, sans-serif;
+    --font-text: 'Inter', system-ui, sans-serif;
+}
+/* Estructura principal */
+#calendar {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.fc-daygrid-day.fc-day-today {
+    background: rgba(0, 158, 35, 0.25) !important; /* Aumenta la opacidad */
+    border: 2px solid #fdfdfd !important;
+    position: relative;
+}
+
+
+/* Color del número del día actual */
+.fc-day-today .fc-daygrid-day-number {
+    color: #1e88e5 !important; /* Color del número */
+    font-weight: 700 !important;
+}
+/* Cabeceras de días */
+.fc-col-header-cell {
+    background: var(--primary-color) !important;
+    padding: 10px 0 !important;
+}
+
+.fc-col-header-cell-cushion {
+    color: white !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+}
+
+/* Eventos normales */
+.fc-event {
+    border: none !important;
+    border-radius: 8px !important;
+    margin: 3px !important;
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color)) !important;
+    color: white !important;
+    padding: 8px !important;
+}
+
+/* Evento HOY - Prioridad máxima */
+.fc-event.evento-hoy {
+    border: 2px solid #4509b4 !important;
+    background: linear-gradient(45deg, #e90505, #98e61b) !important;
+    position: relative;
+    z-index: 2;
+}
+
+/* Badge ¡HOY! */
+.badge-hoy {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: #ffd700 !important;
+    color: #000 !important;
+    font-size: 0.65em;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Contenido del evento */
+.fc-event-main {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    gap: 5px;
+}
+
+.fc-toolbar-title {
+    font-family: var(--font-title);
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.fc-event-title {
+    font-family: var(--font-text);
+    font-size: 0.92rem;
+    font-weight: 800;
+    line-height: 1.4;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.15);
+
+}
+
+.edad-badge {
+    font-family: var(--font-text);
+    font-size: 0.78rem;
+    font-weight: 450;
+    opacity: 0.95;
+    letter-spacing: 0.03em;
+}
+
+.fc-col-header-cell-cushion {
+    font-family: var(--font-title);
+    font-size: 0.9rem;
+}
+
+/* Ajustes móviles */
+@media (max-width: 768px) {
+    .fc-toolbar-title {
+        font-size: 1.4rem;
+    }
+    
+    .fc-event-title {
+        font-size: 0.85rem;
+    }
+    
+    .edad-badge {
+        font-size: 0.72rem;
+    }
+}
+</style>
+</head>
+<body class="calendar-container">
+    <br>
+    <div class="container">
+        <header class="text-center mb-5">
+            <h1 class="display-4 fw-bold mb-3">
+                <i class="bi bi-balloon-heart me-2"></i>
+                Cumpleaños del Personal
+            </h1>
+            <p class="lead text-muted">Celebremos juntos estos días especiales</p>
+        </header>
+
+        <div id="calendar"></div>
+    </div>
+
+    <!-- Dependencias JavaScript -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js'></script>
+
+    <!-- Código del calendario -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+                locale: 'es',
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,dayGridWeek,dayGridDay'
+                },
+                events: {
+                    url: 'birthdays.php',
+                    failure: () => console.error('Error al cargar eventos')
+                },
+                eventContent: (arg) => {
+                    const edad = arg.event.extendedProps?.edad ?? '';
+                    return {
+                        html: `
+                            <div class="fc-event-main">
+                                <div class="fc-event-title">${arg.event.title}</div>
+                                ${edad ? `<div class="edad-badge">${edad} años</div>` : ''}
+                            </div>
+                        `
+                    };
+                },
+                eventDidMount: (info) => {
+                    const hoy = new Date().toLocaleDateString('en-CA'); // Formato YYYY-MM-DD
+                    const eventDate = info.event.startStr;
+                    
+                    if (eventDate === hoy) {
+                        // Agregar clase especial
+                        info.el.classList.add('evento-hoy');
+                        
+                        // Crear badge
+                        const badge = document.createElement('span');
+                        badge.className = 'badge-hoy';
+                        badge.textContent = '¡HOY!';
+                        
+                        // Insertar badge
+                        const eventMain = info.el.querySelector('.fc-event-main');
+                        if (eventMain) {
+                            eventMain.style.position = 'relative';
+                            eventMain.appendChild(badge);
+                        }
+                        
+                        // Efectos hover
+                        info.el.addEventListener('mouseenter', () => {
+                            info.el.style.transform = 'scale(1.02)';
+                            info.el.style.zIndex = '3';
+                        });
+                        
+                        info.el.addEventListener('mouseleave', () => {
+                            info.el.style.transform = 'none';
+                            info.el.style.zIndex = '2';
+                        });
+                    }
+                }
+            });
+            
+            calendar.render();
+        });
+    </script>
+</body>
+</html>

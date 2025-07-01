@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Prueba FullCalendar</title>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js'></script>
+    <script>
+
+      document.addEventListener('DOMContentLoaded', function() {
+        var calendarEl = document.getElementById('calendar');
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+          initialView: 'dayGridMonth'
+        });
+        calendar.render();
+      });
+
+    </script>
+    <style>
+        #calendar {
+            width: 800px;
+            height: 600px;
+            margin: 40px auto;
+            border: 2px solid red; /* Borde para verificar dimensiones */
+        }
+    </style>
+</head>
+<body>
+    <div id="calendar"></div>
+
+    <!-- Scripts -->
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/main.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.8/main.min.js'></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[DEBUG] DOM cargado');
+            
+            const calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+                plugins: [FullCalendar.dayGridPlugin],
+                initialView: 'dayGridMonth',
+                events: [
+                    {
+                        title: 'EVENTO DE PRUEBA',
+                        start: '2024-03-20',
+                        color: '#ff0000'
+                    }
+                ]
+            });
+
+            calendar.render();
+            console.log('[DEBUG] Calendario renderizado', calendar);
+        });
+    </script>
+</body>
+</html>

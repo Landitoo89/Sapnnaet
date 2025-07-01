@@ -1,0 +1,191 @@
+<?php
+session_start();
+require_once __DIR__ . '/conexion/conexion_db.php';
+
+if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'admin') {
+    header('Location: index.php');
+    exit;
+}
+
+$conexion = new mysqli($servidor, $usuario, $contraseña, $basedatos);
+if ($conexion->connect_errno) {
+    die("Error de conexión: " . $conexion->connect_error);
+}
+$tables = [];
+$res = $conexion->query("SHOW TABLES");
+while ($row = $res->fetch_array()) {
+    $tables[] = $row[0];
+}
+require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
+
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Respaldo de BD - Selección de Tablas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Bootstrap y FontAwesome -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        body {
+            background: #10151e;
+            color: #d8f3ff;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            position: relative;
+            overflow-x: hidden;
+        }
+        #matrix-bg {
+            position: fixed;
+            left: 0; top: 0; width: 100vw; height: 100vh; z-index: 0;
+            pointer-events: none; opacity: 0.15; background: transparent;
+        }
+        .backup-container {
+            background: rgba(18,22,30,0.96);
+            border-radius: 22px;
+            box-shadow: 0 8px 44px 0 #3498db22, 0 0px 2px 0 #1effc455;
+            padding: 2.5rem 2rem 2rem 2rem;
+            margin-top: 2rem;
+            max-width: 600px;
+            z-index: 1; position: relative;
+        }
+        .backup-header {
+            background: linear-gradient(90deg, #0e212e 0%, #3498db 100%);
+            color: #fff;
+            border-radius: 14px 14px 0 0;
+            padding: 1.6rem 2rem 1.1rem 2rem;
+            margin: -2.5rem -2rem 2.2rem -2rem;
+            border-bottom: 2px solid #2c3e50;
+            box-shadow: 0 1px 0 #3498db55;
+            text-align:center;
+        }
+        .backup-header h2 {
+            font-size: 2.1rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            text-shadow: 0 7px 26px #0008, 0 1px 0 #3498db77;
+        }
+        .table-list-checklist {
+            background: #181f29;
+            border-radius: 12px;
+            box-shadow: 0 0 11px #17ffe1a2;
+            border: 1.5px solid #3498db44;
+            padding: 1.2rem 1.3rem 1.3rem 1.3rem;
+            margin-bottom: 1.3rem;
+            max-height: 340px;
+            overflow-y: auto;
+        }
+        .checklist-label {
+            display: flex;
+            align-items: center;
+            gap: 0.7em;
+            margin-bottom: 0.45em;
+            font-size: 1.07em;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .checklist-label input[type="checkbox"] {
+            accent-color: #00ffae;
+            width: 1.2em; height: 1.2em;
+        }
+        .checklist-label:hover { color: #00ffae; }
+        .btn-cyber, .btn-cyber-alt {
+            background: linear-gradient(90deg,#00ffae 50%, #3498db 100%);
+            color: #10151e; font-weight: bold; font-size: 1.1em;
+            border: none; border-radius: 9px; padding: 0.7em 2em;
+            margin: 0.5em 0.4em 0.2em 0;
+            box-shadow: 0 1px 8px #00ffae33;
+            transition: background 0.18s, color 0.18s;
+        }
+        .btn-cyber:hover { background: linear-gradient(90deg,#3498db 50%, #00ffae 100%); color: #fff; }
+        .btn-cyber-alt { background: #181f29; color: #00ffae; border: 1.5px solid #00ffae77; }
+        .btn-cyber-alt:hover { background: #00ffae; color: #181f29; }
+
+        .cyber-form-label {
+            color: #80ffc4;
+            font-weight: 600;
+            margin-bottom: 0.9em;
+        }
+        .cyber-desc {
+            color: #aeeeff;
+            font-size: 1.05em;
+            margin-bottom: 1.3em;
+            text-align: center;
+        }
+        .cyber-icon {
+            color: #00ffae;
+            margin-right: 0.65em;
+        }
+        /* Matrix Scrollbar */
+        ::-webkit-scrollbar { width: 8px; background: #16223a;}
+        ::-webkit-scrollbar-thumb { background: #00ffaecc; border-radius: 8px;}
+        ::selection { background: #00ffae88; }
+        @media(max-width: 700px) {
+            .backup-container { padding:1.1rem; }
+            .backup-header { padding:1.1rem; margin:-1.1rem -1.1rem 1.1rem -1.1rem; font-size:1.18em;}
+        }
+    </style>
+</head>
+<body>
+<canvas id="matrix-bg"></canvas>
+<div class="container py-4">
+    <div class="backup-container mx-auto">
+        <div class="backup-header shadow mb-3">
+            <h2><i class="fas fa-database cyber-icon"></i>Respaldo de Base de Datos</h2>
+        </div>
+        <div class="cyber-desc mb-2">
+            Selecciona las <span style="color:#00ffae">tablas</span> que deseas exportar a un archivo SQL.<br>
+            También puedes hacer un <b>respaldo general</b> de toda la base de datos.
+        </div>
+        <form method="POST" action="export_table.php" class="mb-2" id="form-tablas">
+            <label class="cyber-form-label">Tablas disponibles:</label>
+            <div class="table-list-checklist mb-2">
+                <?php foreach ($tables as $tabla): ?>
+                <label class="checklist-label">
+                    <input type="checkbox" name="tablas[]" value="<?= htmlspecialchars($tabla) ?>">
+                    <?= htmlspecialchars($tabla) ?>
+                </label>
+                <?php endforeach; ?>
+            </div>
+            <button type="submit" class="btn btn-cyber" name="backup_tablas">
+                <i class="fas fa-download"></i> Exportar tablas seleccionadas
+            </button>
+            <a href="backup.php" class="btn btn-cyber-alt" title="Respaldo general">
+                <i class="fas fa-database"></i> Backup general
+            </a>
+        </form>
+        <div class="text-muted" style="font-size:0.99em;text-align:center;">Recuerda: ¡solo usuarios administradores pueden acceder a esta función!</div>
+    </div>
+</div>
+<script>
+// Matrix background
+const canvas = document.getElementById('matrix-bg');
+const ctx = canvas.getContext('2d');
+let w = window.innerWidth, h = window.innerHeight;
+canvas.width = w; canvas.height = h;
+let cols = Math.floor(w / 20) + 1;
+let ypos = Array(cols).fill(0);
+function matrix() {
+    ctx.fillStyle = 'rgba(16, 21, 30, 0.13)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.font = '17px monospace';
+    for (let i = 0; i < ypos.length; i++) {
+        const txt = String.fromCharCode(0x30A0 + Math.random() * 96);
+        ctx.fillStyle = '#00ffae';
+        ctx.fillText(txt, i * 20, ypos[i] * 20 + 16);
+        if (Math.random() > 0.985) ypos[i] = 0;
+        else ypos[i]++;
+    }
+}
+setInterval(matrix, 44);
+window.addEventListener('resize', () => {
+    w = window.innerWidth; h = window.innerHeight;
+    canvas.width = w; canvas.height = h;
+    cols = Math.floor(w / 20) + 1; ypos = Array(cols).fill(0);
+});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

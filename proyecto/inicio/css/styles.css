@@ -1,0 +1,269 @@
+
+/* ===== TARJETAS CLICKEABLES ===== */
+.hover-effect {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-effect:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+.card-link {
+    text-decoration: none !important;
+}
+
+.card-link:hover .card-title {
+    text-decoration: underline;
+}
+
+/* Resto del CSS original (mantener todo lo anterior) */
+/* ... */
+/* ===== BARRA LATERAL ===== */
+#sidebar {
+    position: fixed;
+    left: -250px; /* Completamente fuera de la vista cuando está colapsado */
+    width: 250px;
+    height: 100vh;
+    background: linear-gradient(160deg, #2c3e50 0%, #34495e 100%);
+    transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Transición para la propiedad 'left' */
+    z-index: 1050; /* Asegura que la barra lateral esté por encima de todo */
+    box-shadow: 15px 0 25px rgba(0, 0, 0, 0.2);
+    border-right: 3px solid #3498db;
+}
+
+#sidebar.sidebar-expanded {
+    left: 0; /* Se muestra completamente */
+}
+
+#sidebar .nav-link[data-notifications]::after {
+    content: attr(data-notifications);
+    position: absolute;
+    right: 20px;
+    background: #e74c3c;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+}
+
+/* Ajuste de espaciado */
+#sidebar .nav-item {
+    margin: 10px 0;
+}
+
+
+/* Ícono indicador permanente */
+#sidebar::before {
+    content: "☰";
+    position: absolute;
+    right: -28px;
+    top: 20px;
+    color: #3498db;
+    font-size: 1.8rem;
+    text-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    pointer-events: none;
+}
+
+/* Enlaces de navegación */
+#sidebar .nav-link {
+    color: #ecf0f1 !important;
+    padding: 15px 25px;
+    margin: 8px 15px;
+    border-radius: 8px;
+    transition: 0.3s;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+}
+
+#sidebar .nav-link:hover {
+    background: rgba(52, 73, 94, 0.8);
+    transform: translateX(10px);
+}
+
+#sidebar .nav-link.active {
+    background: #3498db;
+    box-shadow: 0 4px 6px rgba(52, 152, 219, 0.3);
+}
+
+/* ===== CONTENIDO PRINCIPAL ===== */
+main {
+    /* Eliminar cualquier margen izquierdo fijo que pueda estar aplastando el contenido */
+    margin-left: 0; 
+    padding: 20px; /* Mantener el padding general */
+    transition: 0.4s;
+    width: 100%; /* Asegurar que ocupe todo el ancho disponible */
+    box-sizing: border-box; /* Incluir padding en el ancho total */
+}
+
+/* Eliminar la regla que empujaba el main cuando el sidebar se expandía */
+/* #sidebar.sidebar-expanded + main { margin-left: 250px; } */
+
+
+/* ===== TRIGGER INTERACTIVO ===== */
+.sidebar-trigger {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 25px;
+    height: 100vh;
+    z-index: 1051; /* Asegura que el trigger esté por encima del sidebar para ser clickeable */
+    cursor: pointer;
+    background: linear-gradient(90deg, 
+        rgba(52, 152, 219, 0.2) 0%, 
+        rgba(52, 152, 219, 0) 100%);
+    transition: 0.3s;
+}
+
+.sidebar-trigger:hover {
+    background: linear-gradient(90deg, 
+        rgba(52, 152, 219, 0.4) 0%, 
+        rgba(52, 152, 219, 0.1) 100%);
+}
+
+/* ===== TARJETAS ===== */
+.card {
+    border: none;
+    border-radius: 15px;
+    transition: 0.3s;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+.card-title {
+    font-size: 1.25rem;
+    color: #2c3e50;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+}
+
+.card-text {
+    font-size: 1rem;
+    color: #ffffff;
+}
+
+.card-header {
+    background-color: #3498db;
+    color: white;
+    font-weight: 600;
+    border-radius: 10px 10px 0 0;
+    padding: 1rem;
+    border-bottom: 2px solid #2980b9;
+}
+
+/* Nuevo estilo para la tarjeta de reposos */
+.card.bg-info .card-header {
+    background-color: #17a2b8; /* Un color azul-cian para el header */
+    border-color: #138496;
+}
+.card.bg-info {
+    background-color: #17a2b8 !important; /* Color de fondo para la tarjeta de reposos */
+}
+
+
+.btn-secondary {
+    background-color: #34495e;
+    border-color: #2c3e50;
+}
+
+.btn-secondary:hover {
+    background-color: #2c3e50;
+    border-color: #2c3e50;
+}
+
+/* ===== SOLICITUDES ===== */
+#vacacionesFields {
+    display: none;
+    border: 1px solid #ced4da;
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 20px;
+    background-color: #f8f8f8;
+}
+
+#vacacionesFields label {
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.input-group-append button {
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 0 5px 5px 0;
+    color: white;
+    padding: 8px 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.input-group-append button:hover {
+    background-color: #45a049;
+    transform: translateY(-1px);
+}
+
+.input-group-text {
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 5px 0 0 5px;
+    color: #2c3e50;
+    padding: 8px 10px;
+}
+
+
+
+
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f8f9fa;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ===== BARRA LATERAL ===== */
+/* Este bloque ya está en la parte superior, lo mantengo para referencia si lo necesitas, pero el principal es el de arriba */
+/* #sidebar {
+    position: fixed;
+    left: -245px !important; 
+    width: 250px;
+    height: 100vh;
+    background: linear-gradient(160deg, #2c3e50 0%, #34495e 100%);
+    transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+    box-shadow: 15px 0 25px rgba(0, 0, 0, 0.2);
+    border-right: 3px solid #3498db;
+}
+
+#sidebar.sidebar-expanded {
+    left: 0 !important;
+} */
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+    #sidebar { 
+        left: -250px !important; /* Asegura que se oculte completamente en móvil */
+        border-right: none;
+    }
+    
+    #sidebar.sidebar-expanded { 
+        left: 0 !important;
+        box-shadow: 15px 0 25px rgba(0, 0, 0, 0.2);
+    }
+    
+    #sidebar.sidebar-expanded + main { 
+        margin-left: 0 !important; /* No empujar el contenido en móvil */
+    }
+
+    #sidebar::before {
+        right: -35px;
+        font-size: 2rem;
+    }
+}
