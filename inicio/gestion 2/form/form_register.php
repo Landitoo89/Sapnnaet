@@ -1,9 +1,39 @@
 <?php
+// Inicia la sesión para manejar mensajes y datos temporales
 session_start();
-require_once __DIR__ . '/../conexion/conexion_db.php';
+// Conexión a MySQL
+require_once __DIR__ . '/../conexion/conexion_db.php'; // Ajusta la ruta a tu archivo de conexión
+
+// Verificar si el usuario está logueado
+if (!isset($_SESSION['usuario'])) {
+    // Registrar intento de acceso no autorizado
+    $detalles_log = "Intento de acceso no autorizado al formulario de datos personales";
+    $ip_address = $_SERVER['REMOTE_ADDR'];
+    $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
+
+    try {
+        $conn_temp = new mysqli($servidor, $usuario, $contraseña, $basedatos);
+        $stmt_log = $conn_temp->prepare("INSERT INTO action_logs (event_type, details, ip_address, user_agent)
+                                        VALUES (?, ?, ?, ?)");
+        $event_type = 'unauthorized_access';
+        $stmt_log->bind_param("ssss", $event_type, $detalles_log, $ip_address, $user_agent);
+        $stmt_log->execute();
+        $stmt_log->close();
+        $conn_temp->close();
+    } catch (Exception $e) {
+        error_log('Error al registrar acceso no autorizado: ' . $e->getMessage());
+    }
+
+    header("Location: ../../../login.php");
+    exit;
+}
+
+$current_user_id = $_SESSION['usuario']['id'];
+//$current_user_name = $_SESSION['usuario']['nombres'] . ' ' . $_SESSION['usuario']['apellidos'];
 
 // Función para registrar logs
 function registrarLog($conn, $user_id, $event_type, $details) {
+    // Asegúrate de que $conn es un objeto mysqli válido
     if ($conn instanceof mysqli) {
         $detalles_log = "Usuario: [$user_id]\n";
         $detalles_log .= "Acción: $event_type\n";
@@ -11,41 +41,25 @@ function registrarLog($conn, $user_id, $event_type, $details) {
 
         $ip_address = $_SERVER['REMOTE_ADDR'];
         $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
-        
-        $stmt_log = $conn->prepare("INSERT INTO action_logs (user_id, event_type, details, ip_address, user_agent) 
+
+        $stmt_log = $conn->prepare("INSERT INTO action_logs (user_id, event_type, details, ip_address, user_agent)
                                    VALUES (?, ?, ?, ?, ?)");
+        // 'issss' -> i para int, s para string
         $stmt_log->bind_param("issss", $user_id, $event_type, $detalles_log, $ip_address, $user_agent);
-        
+
         if (!$stmt_log->execute()) {
             error_log("Error al registrar log: " . $stmt_log->error);
         }
+
         $stmt_log->close();
     } else {
         error_log("Error: La conexión a la base de datos no es válida para registrar el log.");
     }
 }
 
-// Verificar sesión de usuario
-if (!isset($_SESSION['usuario'])) {
-    $detalles_log = "Intento de acceso no autorizado a edición de datos personales";
-    try {
-        $conn_temp = new mysqli($servidor, $usuario, $contraseña, $basedatos);
-        registrarLog($conn_temp, 0, 'unauthorized_access', $detalles_log);
-        $conn_temp->close();
-    } catch (Exception $e) {
-        error_log('Error al registrar acceso no autorizado: ' . $e->getMessage());
-    }
-    header("Location: ../../../login.php");
-    exit;
-}
-
-$current_user_id = $_SESSION['usuario']['id'];
-$id_pers = $_GET['id'] ?? null;
-$registro = [];
-$errores = [];
-
 $conn = new mysqli($servidor, $usuario, $contraseña, $basedatos);
 
+// Verificar conexión
 if ($conn->connect_error) {
     die("Error de conexión: " . $conn->connect_error);
 }
@@ -60,94 +74,58 @@ if ($result_estados) {
     }
 }
 
-// Obtener datos actuales del registro si hay un ID (para precargar el formulario)
-if ($id_pers) {
-    $stmt = $conn->prepare("SELECT * FROM datos_personales WHERE id_pers = ?");
-    $stmt->bind_param("i", $id_pers);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
-    $registro = $resultado->fetch_assoc();
-    $stmt->close();
-
-    // Si no se encuentra el registro, redirigir
-    if (!$registro) {
-        registrarLog($conn, $current_user_id, 'personal_record_not_found', "Intento de acceso a registro inexistente ID: $id_pers");
-        $_SESSION['mensaje'] = [
-            'titulo' => 'Error',
-            'contenido' => 'Registro no encontrado.',
-            'tipo' => 'danger'
-        ];
-        header('Location: ../gestion_personal.php');
-        exit;
-    }
-    
-    // Registrar visualización del formulario
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        registrarLog($conn, $current_user_id, 'view_personal_edit_form', "Visualización de formulario para ID: $id_pers");
-    }
-
-} else {
-    registrarLog($conn, $current_user_id, 'invalid_personal_access', "Acceso sin ID de registro");
-    $_SESSION['mensaje'] = [
-        'titulo' => 'Error',
-        'contenido' => 'ID de registro no proporcionado.',
-        'tipo' => 'danger'
-    ];
-    header('Location: ../gestion_personal.php');
-    exit;
+// Registrar visualización del formulario
+if ($_SERVER["REQUEST_METHOD"] == "GET") {
+    registrarLog($conn, $current_user_id,
+                'view_personal_data_form',
+                'Visualización del formulario de registro de datos personales');
 }
 
-// Valores iniciales para los campos del formulario (usados para repoblar en caso de error)
-$nombres = $_POST['nombres'] ?? ($registro['nombres'] ?? '');
-$apellidos = $_POST['apellidos'] ?? ($registro['apellidos'] ?? '');
-$nacionalidad = $_POST['nacionalidad'] ?? ($registro['nacionalidad'] ?? '');
-$fecha_nacimiento = $_POST['fecha_nacimiento'] ?? ($registro['fecha_nacimiento'] ?? '');
-$genero = $_POST['genero'] ?? ($registro['genero'] ?? '');
-$correo_electronico = $_POST['email'] ?? ($registro['correo_electronico'] ?? '');
-$telefono_contacto = $_POST['telefono'] ?? ($registro['telefono_contacto'] ?? '');
-$posee_telefono_secundario_post = $_POST['posee_telefono_secundario'] ?? ((!empty($registro['telefono_contacto_secundario'])) ? 'Sí' : 'No');
-$telefono_contacto_secundario = $_POST['telefono_secundario'] ?? ($registro['telefono_contacto_secundario'] ?? '');
-$nombre_emergencia = $_POST['nombre_emergencia'] ?? ($registro['nombre_contacto_emergencia'] ?? '');
-$apellido_emergencia = $_POST['apellido_emergencia'] ?? ($registro['apellido_contacto_emergencia'] ?? '');
-$telefono_emergencia = $_POST['telefono_emergencia'] ?? ($registro['telefono_contacto_emergencia'] ?? '');
-$direccion = $_POST['direccion'] ?? ($registro['direccion'] ?? '');
-$id_estado = $_POST['id_estado'] ?? ($registro['id_estado'] ?? '');
-$id_municipio = $_POST['id_municipio'] ?? ($registro['id_municipio'] ?? '');
-$id_parroquia = $_POST['id_parroquia'] ?? ($registro['id_parroquia'] ?? '');
-$numero_seguro_social = $_POST['seguro_social'] ?? ($registro['numero_seguro_social'] ?? '');
-$tiene_discapacidad = $_POST['discapacidad'] ?? ($registro['tiene_discapacidad'] ?? 'No');
-$detalle_discapacidad = $_POST['detalle_discapacidad'] ?? ($registro['detalle_discapacidad'] ?? '');
-$carnet_discapacidad_imagen_path = $registro['carnet_discapacidad_imagen'] ?? ''; // Ruta existente
-$tipo_licencia = $_POST['tipo_licencia'] ?? ($registro['tipo_licencia'] ?? '');
-$licencia_vencimiento = $_POST['licencia_vencimiento'] ?? ($registro['licencia_vencimiento'] ?? '');
-$tiene_licencia_conducir = $_POST['licencia'] ?? ($registro['tiene_licencia_conducir'] ?? 'No');
-$licencia_imagen_path = $registro['licencia_imagen'] ?? ''; // Ruta existente
-$posee_pasaporte = $_POST['posee_pasaporte'] ?? ((!empty($registro['pasaporte']) && $registro['pasaporte'] !== 'NO POSEE') ? 'Sí' : 'No');
-$pasaporte_num = $_POST['pasaporte'] ?? (($registro['pasaporte'] ?? 'NO POSEE') === 'NO POSEE' ? '' : $registro['pasaporte']);
+// Inicializa el array de errores
+$errores = [];
+$mensaje_exito = '';
 
+// Valores por defecto para repoblar el formulario en caso de error
+$nombres = $_POST['nombres'] ?? '';
+$apellidos = $_POST['apellidos'] ?? '';
+$nacionalidad = $_POST['nacionalidad'] ?? '';
+$fecha_nacimiento = $_POST['fecha_nacimiento'] ?? '';
+$genero = $_POST['genero'] ?? '';
+$correo_electronico = $_POST['email'] ?? '';
+$telefono_contacto = $_POST['telefono'] ?? '';
+$posee_telefono_secundario_post = $_POST['posee_telefono_secundario'] ?? 'No';
+$telefono_contacto_secundario = $_POST['telefono_secundario'] ?? '';
+$nombre_emergencia = $_POST['nombre_emergencia'] ?? '';
+$apellido_emergencia = $_POST['apellido_emergencia'] ?? '';
+$telefono_emergencia = $_POST['telefono_emergencia'] ?? '';
+$direccion = $_POST['direccion'] ?? '';
+$id_estado = $_POST['id_estado'] ?? '';
+$id_municipio = $_POST['id_municipio'] ?? '';
+$id_parroquia = $_POST['id_parroquia'] ?? '';
+$numero_seguro_social = $_POST['seguro_social'] ?? '';
+$tiene_discapacidad = $_POST['discapacidad'] ?? 'No';
+$detalle_discapacidad = $_POST['detalle_discapacidad'] ?? '';
+$carnet_discapacidad_imagen_path = ''; // Inicializar la ruta de la imagen de discapacidad
+$tipo_licencia = $_POST['tipo_licencia'] ?? ''; // Nuevo campo
+$licencia_vencimiento = $_POST['licencia_vencimiento'] ?? ''; // Nuevo campo
+$tiene_licencia_conducir = $_POST['licencia'] ?? 'No';
+$licencia_imagen_path = ''; // Inicializar la ruta de la imagen de licencia
+$posee_pasaporte = $_POST['posee_pasaporte'] ?? 'No';
+$pasaporte_num = $_POST['pasaporte'] ?? '';
 
 // Para repoblar los números de cédula y RIF en el HTML
-$cedula_numero_html = htmlspecialchars(substr($registro['cedula_identidad'] ?? '', 2));
-$rif_prefijo_html = htmlspecialchars(substr($registro['rif'] ?? '', 0, 2));
-$rif_numero_html = htmlspecialchars(substr($registro['rif'] ?? '', 2));
+$cedula_numero_html = htmlspecialchars($_POST['cedula_numero'] ?? '');
+// Para RIF, se repuebla el prefijo y el número
+$rif_prefijo_html = $_POST['rif_prefijo'] ?? 'V-'; // Default for RIF
+$rif_numero_html = htmlspecialchars($_POST['rif_numero'] ?? '');
 
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id_pers = $_POST['id_pers'];
-    
-    // Guardar valores antiguos para comparación (incluyendo los nuevos campos)
-    $stmt_old = $conn->prepare("SELECT * FROM datos_personales WHERE id_pers = ?");
-    $stmt_old->bind_param("i", $id_pers);
-    $stmt_old->execute();
-    $resultado_old = $stmt_old->get_result();
-    $valores_antiguos = $resultado_old->fetch_assoc();
-    $stmt_old->close();
-    
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Limpiar y obtener datos del formulario
     $nombres = trim($_POST['nombres']);
     $apellidos = trim($_POST['apellidos']);
-    
-    // Cédula y RIF: obtener solo el número para la base de datos
+
+    // --- CAMBIO CLAVE AQUÍ: Obtener SOLO los números para cédula y RIF para guardar en DB ---
     $cedula_db = filter_input(INPUT_POST, 'cedula_numero', FILTER_SANITIZE_NUMBER_INT);
     $rif_prefijo_post = strtoupper(trim($_POST['rif_prefijo']));
     $rif_db = filter_input(INPUT_POST, 'rif_numero', FILTER_SANITIZE_NUMBER_INT);
@@ -157,14 +135,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nacionalidad = $_POST['nacionalidad'];
     $correo_electronico = trim($_POST['email']);
     $telefono_contacto = trim($_POST['telefono']);
-    
+
     $posee_telefono_secundario_post = $_POST['posee_telefono_secundario'] ?? 'No';
     $telefono_contacto_secundario = ($posee_telefono_secundario_post === 'Sí') ? (trim($_POST['telefono_secundario'] ?? '')) : NULL;
 
     $nombre_emergencia = trim($_POST['nombre_emergencia']);
     $apellido_emergencia = trim($_POST['apellido_emergencia']);
     $telefono_emergencia = trim($_POST['telefono_emergencia']);
-    
+
+    // Nueva dirección exacta y geográfica
     $direccion = trim($_POST['direccion']);
     $id_estado = $_POST['id_estado'] ?? '';
     $id_municipio = $_POST['id_municipio'] ?? '';
@@ -175,66 +154,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tiene_discapacidad = $_POST['discapacidad'] ?? 'No';
     $detalle_discapacidad = ($tiene_discapacidad == 'Sí') ? (trim($_POST['detalle_discapacidad'] ?? '')) : 'No aplica';
 
+    $tiene_licencia_conducir = $_POST['licencia'] ?? 'No';
     $tipo_licencia = ($tiene_licencia_conducir == 'Sí') ? ($_POST['tipo_licencia'] ?? '') : NULL;
     $licencia_vencimiento = ($tiene_licencia_conducir == 'Sí') ? ($_POST['licencia_vencimiento'] ?? '') : NULL;
-    $tiene_licencia_conducir = $_POST['licencia'] ?? 'No';
 
     $posee_pasaporte = $_POST['posee_pasaporte'] ?? 'No';
     $pasaporte_db = ($posee_pasaporte === 'Sí') ? (strtoupper(trim($_POST['pasaporte'] ?? ''))) : 'NO POSEE';
 
     // Manejo de subida de archivos
+    // Rutas de subida de archivos (ajustadas para estar en el mismo directorio que form_register.php)
     $upload_dir_discapacidad = __DIR__ . '/discapacidad/';
     $upload_dir_licencia = __DIR__ . '/licencia/';
 
     // Asegurarse de que los directorios existan
     if (!is_dir($upload_dir_discapacidad)) {
-        mkdir($upload_dir_discapacidad, 0755, true);
+        mkdir($upload_dir_discapacidad, 0755, true); // Crea recursivamente con permisos 0755
     }
     if (!is_dir($upload_dir_licencia)) {
-        mkdir($upload_dir_licencia, 0755, true);
+        mkdir($upload_dir_licencia, 0755, true); // Crea recursivamente con permisos 0755
     }
 
-    // Lógica para carnet de discapacidad
-    $carnet_discapacidad_imagen_path_for_db = $registro['carnet_discapacidad_imagen']; // Mantener la existente por defecto
+    // Archivo de carnet de discapacidad
     if ($tiene_discapacidad == 'Sí' && isset($_FILES['carnet_discapacidad_imagen']) && $_FILES['carnet_discapacidad_imagen']['error'] == UPLOAD_ERR_OK) {
         $file_tmp_name = $_FILES['carnet_discapacidad_imagen']['tmp_name'];
         $file_name = uniqid() . '_' . basename($_FILES['carnet_discapacidad_imagen']['name']);
         $carnet_discapacidad_imagen_full_path = $upload_dir_discapacidad . $file_name;
-        if (move_uploaded_file($file_tmp_name, $carnet_discapacidad_imagen_full_path)) {
-            $carnet_discapacidad_imagen_path_for_db = 'form/discapacidad/' . $file_name;
+        if (!move_uploaded_file($file_tmp_name, $carnet_discapacidad_imagen_full_path)) {
+            $errores[] = "Error al subir la imagen del carnet de discapacidad. Verifique permisos de la carpeta: " . $upload_dir_discapacidad;
+            $carnet_discapacidad_imagen_path = NULL; // Reset path on error
         } else {
-            $errores[] = "Error al subir la nueva imagen del carnet de discapacidad.";
+            // Guarda la ruta relativa al directorio del formulario para la DB
+            $carnet_discapacidad_imagen_path = 'form/discapacidad/' . $file_name;
         }
-    } elseif ($tiene_discapacidad == 'Sí' && empty($registro['carnet_discapacidad_imagen']) && empty($_FILES['carnet_discapacidad_imagen']['name'])) {
-        // Si se marca "Sí" y no hay imagen existente ni se sube una nueva
+    } elseif ($tiene_discapacidad == 'Sí') {
         $errores[] = "Debe subir la imagen del carnet de discapacidad si seleccionó 'Sí'.";
-    } elseif ($tiene_discapacidad == 'No') {
-        // Si se marca "No", eliminar la ruta de la imagen
-        $carnet_discapacidad_imagen_path_for_db = NULL;
+    } else {
+        $carnet_discapacidad_imagen_path = NULL;
     }
 
-
-    // Lógica para licencia de conducir
-    $licencia_imagen_path_for_db = $registro['licencia_imagen']; // Mantener la existente por defecto
+    // Archivo de licencia de conducir
     if ($tiene_licencia_conducir == 'Sí' && isset($_FILES['licencia_imagen']) && $_FILES['licencia_imagen']['error'] == UPLOAD_ERR_OK) {
         $file_tmp_name = $_FILES['licencia_imagen']['tmp_name'];
         $file_name = uniqid() . '_' . basename($_FILES['licencia_imagen']['name']);
         $licencia_imagen_full_path = $upload_dir_licencia . $file_name;
-        if (move_uploaded_file($file_tmp_name, $licencia_imagen_full_path)) {
-            $licencia_imagen_path_for_db = 'form/licencia/' . $file_name;
+        if (!move_uploaded_file($file_tmp_name, $licencia_imagen_full_path)) {
+            $errores[] = "Error al subir la imagen de la licencia de conducir. Verifique permisos de la carpeta: " . $upload_dir_licencia;
+            $licencia_imagen_path = NULL; // Reset path on error
         } else {
-            $errores[] = "Error al subir la nueva imagen de la licencia de conducir.";
+            // Guarda la ruta relativa al directorio del formulario para la DB
+            $licencia_imagen_path = 'form/licencia/' . $file_name;
         }
-    } elseif ($tiene_licencia_conducir == 'Sí' && empty($registro['licencia_imagen']) && empty($_FILES['licencia_imagen']['name'])) {
-        // Si se marca "Sí" y no hay imagen existente ni se sube una nueva
+    } elseif ($tiene_licencia_conducir == 'Sí') {
         $errores[] = "Debe subir la imagen de la licencia de conducir si seleccionó 'Sí'.";
-    } elseif ($tiene_licencia_conducir == 'No') {
-        // Si se marca "No", eliminar la ruta de la imagen
-        $licencia_imagen_path_for_db = NULL;
+    } else {
+        $licencia_imagen_path = NULL;
     }
 
 
-    // Validaciones
+    // Validaciones (Ajustadas para validar solo la parte numérica)
     if (empty($nombres)) $errores[] = "Los nombres son obligatorios.";
     if (empty($apellidos)) $errores[] = "Los apellidos son obligatorios.";
 
@@ -264,6 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errores[] = "El teléfono de contacto de emergencia debe contener 11 dígitos numéricos si se proporciona.";
     }
 
+
     // Nueva validación de geografía/dirección
     if (empty($id_estado)) $errores[] = "Debe seleccionar un estado.";
     if (empty($id_municipio)) $errores[] = "Debe seleccionar un municipio.";
@@ -287,6 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+
     // Validación de fecha de nacimiento (mayor a 18 años)
     $fecha_nacimiento_dt = new DateTime($fecha_nacimiento);
     $hoy = new DateTime();
@@ -295,196 +274,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errores[] = "El empleado debe ser mayor de 18 años para el registro.";
     }
 
-    // Si no hay errores, procede a actualizar
+    // Si no hay errores, procede a insertar
     if (empty($errores)) {
         try {
-            // Verificar si la cédula (solo el número) ya existe para otro registro
-            $stmt_check_cedula = $conn->prepare("SELECT id_pers FROM datos_personales WHERE cedula_identidad = ? AND id_pers != ?");
-            $stmt_check_cedula->bind_param("si", $cedula_db, $id_pers);
+            // Verificar si la cédula (solo el número) ya existe
+            $stmt_check_cedula = $conn->prepare("SELECT id_pers FROM datos_personales WHERE cedula_identidad = ?");
+            $stmt_check_cedula->bind_param("s", $cedula_db);
             $stmt_check_cedula->execute();
             $stmt_check_cedula->store_result();
             if ($stmt_check_cedula->num_rows > 0) {
-                $errores[] = "La cédula de identidad ya se encuentra registrada para otro empleado.";
+                $errores[] = "La cédula de identidad ya se encuentra registrada.";
             }
             $stmt_check_cedula->close();
 
-            // Verificar si el RIF (solo el número) ya existe para otro registro
-            $stmt_check_rif = $conn->prepare("SELECT id_pers FROM datos_personales WHERE rif = ? AND id_pers != ?");
-            $stmt_check_rif->bind_param("si", $rif_db, $id_pers);
+            // Verificar si el RIF (solo el número) ya existe
+            $stmt_check_rif = $conn->prepare("SELECT id_pers FROM datos_personales WHERE rif = ?");
+            $stmt_check_rif->bind_param("s", $rif_db);
             $stmt_check_rif->execute();
             $stmt_check_rif->store_result();
             if ($stmt_check_rif->num_rows > 0) {
-                $errores[] = "El RIF ya se encuentra registrado para otro empleado.";
+                $errores[] = "El RIF ya se encuentra registrado.";
             }
             $stmt_check_rif->close();
 
             // Solo si no hay nuevos errores después de las verificaciones de existencia
             if (empty($errores)) {
-                $stmt = $conn->prepare("UPDATE datos_personales SET 
-                    nombres = ?,
-                    apellidos = ?,
-                    cedula_identidad = ?,
-                    pasaporte = ?,
-                    rif = ?,
-                    genero = ?,
-                    fecha_nacimiento = ?,
-                    nacionalidad = ?,
-                    correo_electronico = ?,
-                    telefono_contacto = ?,
-                    telefono_contacto_secundario = ?, 
-                    nombre_contacto_emergencia = ?,
-                    apellido_contacto_emergencia = ?,
-                    telefono_contacto_emergencia = ?,
-                    tiene_discapacidad = ?,
-                    detalle_discapacidad = ?,
-                    carnet_discapacidad_imagen = ?,
-                    tiene_licencia_conducir = ?,
-                    tipo_licencia = ?,
-                    licencia_vencimiento = ?,
-                    licencia_imagen = ?,
-                    numero_seguro_social = ?,
-                    direccion = ?,
-                    id_estado = ?,
-                    id_municipio = ?,
-                    id_parroquia = ?
-                    WHERE id_pers = ?");
-                    
-                $stmt->bind_param("ssssssssssssssssssssssssssi", 
+                $stmt = $conn->prepare("INSERT INTO datos_personales (
+                    nombres, apellidos, cedula_identidad, pasaporte, rif, genero,
+                    fecha_nacimiento, nacionalidad, correo_electronico, telefono_contacto,
+                    telefono_contacto_secundario,
+                    nombre_contacto_emergencia, apellido_contacto_emergencia,
+                    telefono_contacto_emergencia, tiene_discapacidad, detalle_discapacidad, carnet_discapacidad_imagen,
+                    tiene_licencia_conducir, tipo_licencia, licencia_vencimiento, licencia_imagen, numero_seguro_social,
+                    direccion, id_estado, id_municipio, id_parroquia
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+                $stmt->bind_param("ssssssssssssssssssssssssss",
                     $nombres,
                     $apellidos,
-                    $cedula_db,
+                    $cedula_db, // Se guarda solo el número
                     $pasaporte_db,
-                    $rif_db,
+                    $rif_db,      // Se guarda solo el número
                     $genero,
                     $fecha_nacimiento,
                     $nacionalidad,
                     $correo_electronico,
                     $telefono_contacto,
-                    $telefono_contacto_secundario, 
+                    $telefono_contacto_secundario,
                     $nombre_emergencia,
                     $apellido_emergencia,
                     $telefono_emergencia,
                     $tiene_discapacidad,
                     $detalle_discapacidad,
-                    $carnet_discapacidad_imagen_path_for_db,
+                    $carnet_discapacidad_imagen_path,
                     $tiene_licencia_conducir,
                     $tipo_licencia,
                     $licencia_vencimiento,
-                    $licencia_imagen_path_for_db,
+                    $licencia_imagen_path,
                     $numero_seguro_social,
                     $direccion,
                     $id_estado,
                     $id_municipio,
-                    $id_parroquia,
-                    $id_pers);
-                    
-                if ($stmt->execute()) {
-                    // Registrar cambios exitosos
-                    $detalles_cambios = [];
-                    $campos = [
-                        'nombres', 'apellidos', 'cedula_identidad', 'pasaporte', 'rif', 'genero',
-                        'fecha_nacimiento', 'nacionalidad', 'correo_electronico', 'telefono_contacto',
-                        'telefono_contacto_secundario', 'nombre_contacto_emergencia', 'apellido_contacto_emergencia',
-                        'telefono_contacto_emergencia', 'tiene_discapacidad', 'detalle_discapacidad',
-                        'carnet_discapacidad_imagen', 'tiene_licencia_conducir', 'tipo_licencia',
-                        'licencia_vencimiento', 'licencia_imagen', 'numero_seguro_social', 'direccion',
-                        'id_estado', 'id_municipio', 'id_parroquia'
-                    ];
-                    
-                    foreach ($campos as $campo) {
-                        $valor_antiguo = $valores_antiguos[$campo] ?? 'N/A';
-                        $valor_nuevo = '';
+                    $id_parroquia
+                );
 
-                        // Obtener el valor actual de la variable correspondiente
-                        switch ($campo) {
-                            case 'cedula_identidad':
-                                $valor_nuevo = $cedula_db;
-                                break;
-                            case 'rif':
-                                $valor_nuevo = $rif_db;
-                                break;
-                            case 'pasaporte':
-                                $valor_nuevo = $pasaporte_db;
-                                break;
-                            case 'telefono_contacto_secundario':
-                                $valor_nuevo = $telefono_contacto_secundario;
-                                break;
-                            case 'carnet_discapacidad_imagen':
-                                $valor_nuevo = $carnet_discapacidad_imagen_path_for_db;
-                                break;
-                            case 'licencia_imagen':
-                                $valor_nuevo = $licencia_imagen_path_for_db;
-                                break;
-                            case 'tipo_licencia':
-                                $valor_nuevo = $tipo_licencia;
-                                break;
-                            case 'licencia_vencimiento':
-                                $valor_nuevo = $licencia_vencimiento;
-                                break;
-                            case 'id_estado':
-                                $valor_nuevo = $id_estado;
-                                break;
-                            case 'id_municipio':
-                                $valor_nuevo = $id_municipio;
-                                break;
-                            case 'id_parroquia':
-                                $valor_nuevo = $id_parroquia;
-                                break;
-                            default:
-                                $valor_nuevo = $_POST[$campo] ?? ''; // Para campos que coinciden directamente
-                                if (isset($$campo)) { // Si la variable existe y fue procesada
-                                    $valor_nuevo = $$campo;
-                                }
-                                break;
-                        }
-                        
-                        if ($valor_antiguo != $valor_nuevo) {
-                            $detalles_cambios[] = "$campo: '$valor_antiguo' → '$valor_nuevo'";
-                        }
-                    }
-                    
-                    $detalles_log = "Usuario ID: $current_user_id actualizó datos personales ID: $id_pers\n";
-                    $detalles_log .= "Cambios realizados:\n" . implode("\n", $detalles_cambios);
-                    
-                    registrarLog($conn, $current_user_id, 'personal_data_updated', $detalles_log);
-                    
+                if ($stmt->execute()) {
+                    $id_pers = $conn->insert_id;
+
+                    registrarLog($conn, $current_user_id,
+                                'personal_data_created',
+                                "Nuevo registro creado con ID: $id_pers\n" .
+                                "Nombre: $nombres $apellidos\n" .
+                                "Cédula: $cedula_db\n" .
+                                "RIF: $rif_db");
+
                     $_SESSION['mensaje'] = [
-                        'titulo' => '¡Actualización Exitosa!',
-                        'contenido' => 'Los datos personales han sido actualizados correctamente.',
+                        'titulo' => '¡Registro Exitoso!',
+                        'contenido' => 'Datos personales guardados. Continuar con los datos socioeconómicos.',
                         'tipo' => 'success'
                     ];
-                    header("Location: ../gestion_personal.php");
-                    exit;
+                    header("Location: form_datossocioeco.php?id_pers=" . $id_pers . "&nombres=" . urlencode($nombres) . "&apellidos=" . urlencode($apellidos));
+                    exit();
                 } else {
-                    $errores[] = "Error al actualizar datos personales: " . $stmt->error;
-                    registrarLog($conn, $current_user_id, 'personal_update_error', "Error al actualizar: " . $stmt->error);
+                    $errores[] = "Error al registrar datos personales: " . $stmt->error;
+                    registrarLog($conn, $current_user_id,
+                                'personal_data_insert_error',
+                                "Error al insertar datos: " . $stmt->error);
                 }
                 $stmt->close();
             }
 
         } catch (Exception $e) {
             $errores[] = "Error inesperado: " . $e->getMessage();
-            registrarLog($conn, $current_user_id, 'personal_update_exception', "Excepción: " . $e->getMessage());
+            registrarLog($conn, $current_user_id,
+                        'personal_data_exception',
+                        "Excepción: " . $e->getMessage());
         }
     } else {
         $detalles_errores = implode('; ', $errores);
-        registrarLog($conn, $current_user_id, 'personal_validation_failed', "Errores: $detalles_errores");
+        registrarLog($conn, $current_user_id,
+                    'personal_data_validation_failed',
+                    "Errores de validación: $detalles_errores");
     }
 }
 
 $conn->close();
 ?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editar Datos Personales</title>
+    <title>Registro de Personal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="../css/formularios_styles.css">
-    <style>
+    <link rel="stylesheet" href="../css/formularios_styles.css"> <style>
         .form-container-custom {
             background: white;
             padding: 2.5rem;
@@ -517,10 +420,6 @@ $conn->close();
         .radio-group label {
             margin-right: 15px;
         }
-        /* Clase para campos condicionales, inicialmente oculta */
-        .conditional-field {
-            display: none; 
-        }
     </style>
 </head>
 <body>
@@ -528,7 +427,7 @@ $conn->close();
         <div class="form-container-custom">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h1 class="text-primary mb-0">
-                    <i class="bi bi-person-plus me-2"></i>Editar Datos Personales
+                    <i class="bi bi-person-plus me-2"></i>Registro de Datos Personales
                 </h1>
                 <a href="../gestion_personal.php" class="btn btn-secondary">
                     <i class="bi bi-arrow-left me-2"></i>Volver a Gestión
@@ -559,11 +458,8 @@ $conn->close();
                 </div>
                 <?php unset($_SESSION['mensaje']); ?>
             <?php endif; ?>
-        
-            <form method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="id_pers" value="<?= htmlspecialchars($registro['id_pers']) ?>">
-                
-                <!-- Sección Información Básica -->
+
+            <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>" enctype="multipart/form-data">
                 <div class="form-section-header">
                     <h2><i class="bi bi-info-circle-fill me-2"></i>Información Básica</h2>
                 </div>
@@ -602,8 +498,7 @@ $conn->close();
                         <label for="rif_numero" class="form-label">RIF*:</label>
                         <div class="input-group input-group-custom">
                             <select class="form-select" id="rif_prefijo" name="rif_prefijo">
-                                <option value="" disabled>Prefijo</option>
-                                <option value="V-" <?= ($rif_prefijo_html == 'V-') ? 'selected' : '' ?>>V-</option>
+                                <option value="" disabled selected>Prefijo</option> <option value="V-" <?= ($rif_prefijo_html == 'V-') ? 'selected' : '' ?>>V-</option>
                                 <option value="J-" <?= ($rif_prefijo_html == 'J-') ? 'selected' : '' ?>>J-</option>
                                 <option value="G-" <?= ($rif_prefijo_html == 'G-') ? 'selected' : '' ?>>G-</option>
                                 <option value="E-" <?= ($rif_prefijo_html == 'E-') ? 'selected' : '' ?>>E-</option>
@@ -627,13 +522,13 @@ $conn->close();
                             </div>
                         </div>
                     </div>
-                    <div id="pasaporte_container" class="col-md-12 mb-3 conditional-field <?= ($posee_pasaporte == 'Sí') ? '' : 'd-none' ?>">
+                    <div id="pasaporte_container" class="col-md-12 mb-3 conditional-field d-none">
                         <label for="pasaporte_input" class="form-label">Número de Pasaporte:</label>
                         <input type="text" name="pasaporte" id="pasaporte_input" class="form-control" value="<?= htmlspecialchars($pasaporte_num) ?>" oninput="this.value = this.value.toUpperCase()">
                     </div>
                 </div>
 
-                <!-- SECCIÓN DE DIRECCIÓN -->
+                <!-- NUEVA SECCIÓN DE DIRECCIÓN -->
                 <div class="mb-3">
                     <label for="id_estado" class="form-label">Estado*:</label>
                     <select name="id_estado" id="id_estado" class="form-select" required>
@@ -659,7 +554,7 @@ $conn->close();
                     <label for="direccion" class="form-label">Dirección exacta*:</label>
                     <input type="text" name="direccion" id="direccion" class="form-control" value="<?= htmlspecialchars($direccion) ?>" required>
                 </div>
-                <!-- FIN DE SECCIÓN DE DIRECCIÓN -->
+                <!-- FIN DE NUEVA SECCIÓN DE DIRECCIÓN -->
 
                 <div class="form-section-header mt-5">
                     <h2><i class="bi bi-file-person-fill me-2"></i>Datos Personales Adicionales</h2>
@@ -682,40 +577,37 @@ $conn->close();
                     </div>
                 </div>
 
-                <div class="mb-3" data-initial-discapacidad="<?= ($tiene_discapacidad == 'Sí') ? 'true' : 'false' ?>">
+                <div class="mb-3">
                     <label class="form-label">¿Posee discapacidad?*</label>
                     <div class="radio-group">
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="discapacidad" id="discapacidad_si" value="Sí"
-                                   onchange="toggleCampo('detalle-discapacidad-container', 'detalle_discapacidad', this.value === 'Sí', true); toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'Sí') ? 'checked' : '' ?> required>
+                                   onchange="toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true); toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'Sí') ? 'checked' : '' ?> required>
                             <label class="form-check-label" for="discapacidad_si">Sí</label>
                         </div>
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="discapacidad" id="discapacidad_no" value="No"
-                                   onchange="toggleCampo('detalle-discapacidad-container', 'detalle_discapacidad', this.value === 'Sí', true); toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'No') ? 'checked' : '' ?>>
+                                   onchange="toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true); toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'No') ? 'checked' : '' ?>>
                             <label class="form-check-label" for="discapacidad_no">No</label>
                         </div>
                     </div>
                 </div>
 
-                <div id="detalle-discapacidad-container" class="conditional-field <?= ($tiene_discapacidad == 'Sí') ? '' : 'd-none' ?>">
+                <div id="detalle-discapacidad" class="conditional-field d-none">
                     <div class="mb-3">
                         <label for="detalle_discapacidad" class="form-label">Detalle de la discapacidad*:</label>
                         <input type="text" name="detalle_discapacidad" id="detalle_discapacidad" class="form-control" value="<?= htmlspecialchars($detalle_discapacidad) ?>">
                     </div>
                 </div>
 
-                <div id="carnet-discapacidad-imagen-container" class="conditional-field <?= ($tiene_discapacidad == 'Sí') ? '' : 'd-none' ?>">
+                <div id="carnet-discapacidad-imagen-container" class="conditional-field d-none">
                     <div class="mb-3">
                         <label for="carnet_discapacidad_imagen" class="form-label">Foto del carnet de discapacidad*:</label>
-                        <?php if (!empty($carnet_discapacidad_imagen_path)): ?>
-                            <p class="text-muted">Archivo actual: <a href="<?= htmlspecialchars($carnet_discapacidad_imagen_path) ?>" target="_blank">Ver imagen</a></p>
-                        <?php endif; ?>
                         <input type="file" name="carnet_discapacidad_imagen" id="carnet_discapacidad_imagen" class="form-control" accept="image/*">
                     </div>
                 </div>
 
-                <div class="mb-3" data-initial-licencia="<?= ($tiene_licencia_conducir == 'Sí') ? 'true' : 'false' ?>">
+                <div class="mb-3">
                     <label class="form-label">¿Tiene licencia de conducir?*</label>
                     <div class="radio-group">
                         <div class="form-check form-check-inline">
@@ -731,7 +623,7 @@ $conn->close();
                     </div>
                 </div>
 
-                <div id="licencia-details-container" class="conditional-field <?= ($tiene_licencia_conducir == 'Sí') ? '' : 'd-none' ?>">
+                <div id="licencia-details-container" class="conditional-field d-none">
                     <div class="mb-3">
                         <label for="tipo_licencia" class="form-label">Tipo de Licencia*:</label>
                         <select name="tipo_licencia" id="tipo_licencia" class="form-select">
@@ -749,14 +641,10 @@ $conn->close();
                     </div>
                     <div class="mb-3">
                         <label for="licencia_imagen" class="form-label">Foto de la Licencia de Conducir*:</label>
-                        <?php if (!empty($licencia_imagen_path)): ?>
-                            <p class="text-muted">Archivo actual: <a href="<?= htmlspecialchars($licencia_imagen_path) ?>" target="_blank">Ver imagen</a></p>
-                        <?php endif; ?>
                         <input type="file" name="licencia_imagen" id="licencia_imagen" class="form-control" accept="image/*">
                     </div>
                 </div>
 
-                <!-- Sección de Contacto -->
                 <div class="form-section-header mt-5">
                     <h2><i class="bi bi-phone-fill me-2"></i>Información de Contacto</h2>
                 </div>
@@ -768,7 +656,7 @@ $conn->close();
                 <div class="mb-3">
                     <label for="telefono_principal" class="form-label">Teléfono Principal*:</label>
                     <input type="tel" name="telefono" id="telefono_principal" class="form-control" placeholder="Ej: 04121234567" pattern="[0-9]{11}" value="<?= htmlspecialchars($telefono_contacto) ?>" required>
-                    
+
                     <div class="mt-3">
                         <label class="form-label">¿Desea agregar un teléfono secundario?</label>
                         <div>
@@ -783,11 +671,10 @@ $conn->close();
                         </div>
                     </div>
                 </div>
-                <div id="telefono_secundario_container" class="conditional-field <?= ($posee_telefono_secundario_post == 'Sí') ? '' : 'd-none' ?>">
+                <div id="telefono_secundario_container" class="conditional-field d-none">
                     <div class="mb-3">
                         <label for="telefono_secundario" class="form-label">Teléfono Secundario:</label>
-                        <input type="tel" name="telefono_secundario" id="telefono_secundario" class="form-control" placeholder="Ej: 04147654321" pattern="[0-9]{11}" 
-                               value="<?= htmlspecialchars($telefono_contacto_secundario) ?>">
+                        <input type="tel" name="telefono_secundario" id="telefono_secundario" class="form-control" placeholder="Ej: 04147654321" pattern="[0-9]{11}" value="<?= htmlspecialchars($telefono_contacto_secundario) ?>">
                     </div>
                 </div>
 
@@ -806,14 +693,10 @@ $conn->close();
                     <input type="tel" name="telefono_emergencia" id="telefono_emergencia" class="form-control" placeholder="Ej: 04169876543" pattern="[0-9]{11}" value="<?= htmlspecialchars($telefono_emergencia) ?>">
                 </div>
 
-                <!-- Botón de envío -->
                 <div class="d-grid gap-2 mt-4">
                     <button type="submit" class="btn btn-primary btn-lg">
-                        <i class="bi bi-save me-2"></i>Guardar Cambios
+                        <i class="bi bi-save me-2"></i>Registrar Datos
                     </button>
-                    <a href="../gestion_personal.php" class="btn btn-secondary btn-lg">
-                        <i class="bi bi-x-circle me-2"></i>Cancelar
-                    </a>
                 </div>
             </form>
         </div>
@@ -827,7 +710,6 @@ $conn->close();
                 const container = document.getElementById(containerId);
                 if (!container) return;
 
-                // Asegurarse de que inputIds es un array para iterar
                 const idsArray = Array.isArray(inputIds) ? inputIds : [inputIds];
                 const inputs = idsArray.map(id => document.getElementById(id)).filter(Boolean);
 
@@ -852,42 +734,24 @@ $conn->close();
             }
 
             // --- INICIALIZACIÓN DE CAMPOS CONDICIONALES AL CARGAR LA PÁGINA ---
-
-            // Pasaporte
-            const passportSiRadio = document.getElementById('passport_si');
-            if (passportSiRadio) {
-                // Leer el estado inicial directamente del radio button checked
-                const initialPasaporte = passportSiRadio.checked;
-                toggleCampo('pasaporte_container', 'pasaporte_input', initialPasaporte, true);
-                document.querySelectorAll('input[name="posee_pasaporte"]').forEach(radio => {
-                    radio.addEventListener('change', function() {
-                        toggleCampo('pasaporte_container', 'pasaporte_input', this.value === 'Sí', true);
-                    });
-                });
-            }
-
-            // Discapacidad
             const discapacidadSiRadio = document.getElementById('discapacidad_si');
             if (discapacidadSiRadio) {
-                // Leer el estado inicial directamente del radio button checked
-                const initialDiscapacidad = discapacidadSiRadio.checked;
-                toggleCampo('detalle-discapacidad-container', 'detalle_discapacidad', initialDiscapacidad, true);
+                const initialDiscapacidad = document.querySelector('input[name="discapacidad"]:checked')?.value === 'Sí';
+                toggleCampo('detalle-discapacidad', 'detalle_discapacidad', initialDiscapacidad, true);
                 toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', initialDiscapacidad, true);
 
                 document.querySelectorAll('input[name="discapacidad"]').forEach(radio => {
                     radio.addEventListener('change', function() {
                         const isDiscapacidad = this.value === 'Sí';
-                        toggleCampo('detalle-discapacidad-container', 'detalle_discapacidad', isDiscapacidad, true);
+                        toggleCampo('detalle-discapacidad', 'detalle_discapacidad', isDiscapacidad, true);
                         toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', isDiscapacidad, true);
                     });
                 });
             }
 
-            // Licencia
             const licenciaSiRadio = document.getElementById('licencia_si');
             if (licenciaSiRadio) {
-                // Leer el estado inicial directamente del radio button checked
-                const initialLicencia = licenciaSiRadio.checked;
+                const initialLicencia = document.querySelector('input[name="licencia"]:checked')?.value === 'Sí';
                 toggleCampo('licencia-details-container', ['tipo_licencia', 'licencia_vencimiento', 'licencia_imagen'], initialLicencia, true);
 
                 document.querySelectorAll('input[name="licencia"]').forEach(radio => {
@@ -897,12 +761,20 @@ $conn->close();
                     });
                 });
             }
-            
-            // Teléfono Secundario
+
+            const passportSiRadio = document.getElementById('passport_si');
+            if (passportSiRadio) {
+                const initialPasaporte = document.querySelector('input[name="posee_pasaporte"]:checked')?.value === 'Sí';
+                toggleCampo('pasaporte_container', 'pasaporte_input', initialPasaporte, true);
+                document.querySelectorAll('input[name="posee_pasaporte"]').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        toggleCampo('pasaporte_container', 'pasaporte_input', this.value === 'Sí', true);
+                    });
+                });
+            }
             const telefonoSecundarioSiRadio = document.getElementById('telefono_secundario_si');
             if (telefonoSecundarioSiRadio) {
-                // Leer el estado inicial directamente del radio button checked
-                const initialTelSecundario = telefonoSecundarioSiRadio.checked;
+                const initialTelSecundario = document.querySelector('input[name="posee_telefono_secundario"]:checked')?.value === 'Sí';
                 toggleCampo('telefono_secundario_container', 'telefono_secundario', initialTelSecundario, false);
                 document.querySelectorAll('input[name="posee_telefono_secundario"]').forEach(radio => {
                     radio.addEventListener('change', function() {
@@ -910,68 +782,30 @@ $conn->close();
                     });
                 });
             }
-            
-            // Cálculo y Validación de Edad
             const fechaNacimientoInput = document.getElementById('fecha_nacimiento');
-
-            function calcularEdad() {
-                const dobString = fechaNacimientoInput.value;
-                if (!dobString) {
-                    return;
-                }
-
-                const dob = new Date(dobString);
-                const today = new Date();
-                let age = today.getFullYear() - dob.getFullYear();
-                const m = today.getMonth() - dob.getMonth();
-                if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
-                    age--;
-                }
-
-                // Eliminar cualquier alerta existente
-                const existingAlert = fechaNacimientoInput.parentNode.querySelector('.alert-warning');
-                if (existingAlert) {
-                    existingAlert.remove();
-                }
-
-                if (age < 18) {
-                    const alertDiv = document.createElement('div');
-                    alertDiv.classList.add('alert', 'alert-warning', 'mt-3');
-                    alertDiv.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>La fecha de nacimiento debe ser mayor a 18 años a partir del día de registro.';
-                    fechaNacimientoInput.parentNode.insertBefore(alertDiv, fechaNacimientoInput.nextSibling); 
-                    fechaNacimientoInput.value = ''; // Limpiar el input de fecha
-                    
-                    // Eliminar la alerta después de unos segundos
-                    setTimeout(() => alertDiv.remove(), 5000);
-                }
-            }
-
             if (fechaNacimientoInput) {
-                fechaNacimientoInput.addEventListener('change', calcularEdad);
-                // Calcular la edad al cargar la página si ya hay una fecha de nacimiento
-                if (fechaNacimientoInput.value) {
-                    calcularEdad();
-                }
+                fechaNacimientoInput.addEventListener('change', function() {
+                    const dob = new Date(this.value);
+                    const today = new Date();
+                    let age = today.getFullYear() - dob.getFullYear();
+                    const m = today.getMonth() - dob.getMonth();
+                    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+                        age--;
+                    }
+                    const existingAlert = this.parentNode.querySelector('.alert-warning');
+                    if (existingAlert) {
+                        existingAlert.remove();
+                    }
+                    if (age < 18) {
+                        const alertDiv = document.createElement('div');
+                        alertDiv.classList.add('alert', 'alert-warning', 'mt-3');
+                        alertDiv.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>La fecha de nacimiento debe ser mayor a 18 años a partir del día de registro.';
+                        this.parentNode.insertBefore(alertDiv, this.nextSibling);
+                        this.value = '';
+                        setTimeout(() => alertDiv.remove(), 5000);
+                    }
+                });
             }
-
-            // Función para rellenar los prefijos de CI/RIF (ahora solo números en los inputs)
-            function splitPrefixedValue(fullValue, numberInputId) {
-                const numberInput = document.getElementById(numberInputId);
-                if (!fullValue || !numberInput) return;
-
-                // Asume que el prefijo es siempre 2 caracteres + '-'
-                const parts = fullValue.split('-');
-                if (parts.length > 1) {
-                    numberInput.value = parts.slice(1).join('-');
-                } else {
-                    numberInput.value = fullValue;
-                }
-            }
-
-            // Aplicar la lógica al cargar la página para CI y RIF
-            splitPrefixedValue("<?= htmlspecialchars($registro['cedula_identidad'] ?? '') ?>", 'cedula_numero');
-            splitPrefixedValue("<?= htmlspecialchars($registro['rif'] ?? '') ?>", 'rif_numero');
-
 
             // --- DIRECCIÓN: Selects dependientes ---
             const estadoSelect = document.getElementById('id_estado');
@@ -1028,17 +862,14 @@ $conn->close();
                 cargarParroquias(this.value);
             });
 
-            // Si hay selección previa (POST con error) o al cargar la página, recarga municipios y parroquias
+            // Si hay selección previa (POST con error), recarga municipios y parroquias
             if (estadoSelect.value) {
                 cargarMunicipios(estadoSelect.value, selectedMunicipio);
             }
-            // La carga de parroquias se hace dentro de cargarMunicipios si hay un municipio seleccionado inicialmente.
-            // Si el municipio ya está cargado (ej. por un error de POST que no recargó el estado), se puede cargar aquí también.
-            else if (municipioSelect.value) { // Esto es un fallback, normalmente cargarMunicipios lo manejaría
-                 cargarParroquias(municipioSelect.value, selectedParroquia);
+            if (municipioSelect.value) {
+                cargarParroquias(municipioSelect.value, selectedParroquia);
             }
         });
     </script>
 </body>
 </html>
-
