@@ -64,6 +64,16 @@ if ($conn->connect_error) {
     die("Error de conexión: " . $conn->connect_error);
 }
 
+// Obtener lista de estados para el select
+$estados = [];
+$sql_estados = "SELECT id_estado, nombre FROM estados ORDER BY nombre ASC";
+$result_estados = $conn->query($sql_estados);
+if ($result_estados) {
+    while ($row = $result_estados->fetch_assoc()) {
+        $estados[] = $row;
+    }
+}
+
 // Registrar visualización del formulario
 if ($_SERVER["REQUEST_METHOD"] == "GET") {
     registrarLog($conn, $current_user_id,
@@ -89,11 +99,17 @@ $nombre_emergencia = $_POST['nombre_emergencia'] ?? '';
 $apellido_emergencia = $_POST['apellido_emergencia'] ?? '';
 $telefono_emergencia = $_POST['telefono_emergencia'] ?? '';
 $direccion = $_POST['direccion'] ?? '';
+$id_estado = $_POST['id_estado'] ?? '';
+$id_municipio = $_POST['id_municipio'] ?? '';
+$id_parroquia = $_POST['id_parroquia'] ?? '';
 $numero_seguro_social = $_POST['seguro_social'] ?? '';
 $tiene_discapacidad = $_POST['discapacidad'] ?? 'No';
 $detalle_discapacidad = $_POST['detalle_discapacidad'] ?? '';
+$carnet_discapacidad_imagen_path = ''; // Inicializar la ruta de la imagen de discapacidad
+$tipo_licencia = $_POST['tipo_licencia'] ?? ''; // Nuevo campo
+$licencia_vencimiento = $_POST['licencia_vencimiento'] ?? ''; // Nuevo campo
 $tiene_licencia_conducir = $_POST['licencia'] ?? 'No';
-$detalle_licencia = $_POST['detalle_licencia'] ?? '';
+$licencia_imagen_path = ''; // Inicializar la ruta de la imagen de licencia
 $posee_pasaporte = $_POST['posee_pasaporte'] ?? 'No';
 $pasaporte_num = $_POST['pasaporte'] ?? '';
 
@@ -110,13 +126,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $apellidos = trim($_POST['apellidos']);
 
     // --- CAMBIO CLAVE AQUÍ: Obtener SOLO los números para cédula y RIF para guardar en DB ---
-    // filter_input con FILTER_SANITIZE_NUMBER_INT ya limpia no-dígitos
     $cedula_db = filter_input(INPUT_POST, 'cedula_numero', FILTER_SANITIZE_NUMBER_INT);
-    
-    // Para RIF, obtenemos el prefijo y el número, pero solo guardamos el número
-    $rif_prefijo_post = strtoupper(trim($_POST['rif_prefijo'])); // Capturamos el prefijo del RIF si es necesario para alguna lógica o log
+    $rif_prefijo_post = strtoupper(trim($_POST['rif_prefijo']));
     $rif_db = filter_input(INPUT_POST, 'rif_numero', FILTER_SANITIZE_NUMBER_INT);
-    // --------------------------------------------------------------------------------------
 
     $genero = $_POST['genero'];
     $fecha_nacimiento = $_POST['fecha_nacimiento'];
@@ -130,37 +142,88 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre_emergencia = trim($_POST['nombre_emergencia']);
     $apellido_emergencia = trim($_POST['apellido_emergencia']);
     $telefono_emergencia = trim($_POST['telefono_emergencia']);
+
+    // Nueva dirección exacta y geográfica
     $direccion = trim($_POST['direccion']);
+    $id_estado = $_POST['id_estado'] ?? '';
+    $id_municipio = $_POST['id_municipio'] ?? '';
+    $id_parroquia = $_POST['id_parroquia'] ?? '';
+
     $numero_seguro_social = trim($_POST['seguro_social']);
 
     $tiene_discapacidad = $_POST['discapacidad'] ?? 'No';
     $detalle_discapacidad = ($tiene_discapacidad == 'Sí') ? (trim($_POST['detalle_discapacidad'] ?? '')) : 'No aplica';
 
     $tiene_licencia_conducir = $_POST['licencia'] ?? 'No';
-    $detalle_licencia = ($tiene_licencia_conducir == 'Sí') ? (trim($_POST['detalle_licencia'] ?? '')) : 'No aplica';
+    $tipo_licencia = ($tiene_licencia_conducir == 'Sí') ? ($_POST['tipo_licencia'] ?? '') : NULL;
+    $licencia_vencimiento = ($tiene_licencia_conducir == 'Sí') ? ($_POST['licencia_vencimiento'] ?? '') : NULL;
 
     $posee_pasaporte = $_POST['posee_pasaporte'] ?? 'No';
     $pasaporte_db = ($posee_pasaporte === 'Sí') ? (strtoupper(trim($_POST['pasaporte'] ?? ''))) : 'NO POSEE';
+
+    // Manejo de subida de archivos
+    // Rutas de subida de archivos (ajustadas para estar en el mismo directorio que form_register.php)
+    $upload_dir_discapacidad = __DIR__ . '/discapacidad/';
+    $upload_dir_licencia = __DIR__ . '/licencia/';
+
+    // Asegurarse de que los directorios existan
+    if (!is_dir($upload_dir_discapacidad)) {
+        mkdir($upload_dir_discapacidad, 0755, true); // Crea recursivamente con permisos 0755
+    }
+    if (!is_dir($upload_dir_licencia)) {
+        mkdir($upload_dir_licencia, 0755, true); // Crea recursivamente con permisos 0755
+    }
+
+    // Archivo de carnet de discapacidad
+    if ($tiene_discapacidad == 'Sí' && isset($_FILES['carnet_discapacidad_imagen']) && $_FILES['carnet_discapacidad_imagen']['error'] == UPLOAD_ERR_OK) {
+        $file_tmp_name = $_FILES['carnet_discapacidad_imagen']['tmp_name'];
+        $file_name = uniqid() . '_' . basename($_FILES['carnet_discapacidad_imagen']['name']);
+        $carnet_discapacidad_imagen_full_path = $upload_dir_discapacidad . $file_name;
+        if (!move_uploaded_file($file_tmp_name, $carnet_discapacidad_imagen_full_path)) {
+            $errores[] = "Error al subir la imagen del carnet de discapacidad. Verifique permisos de la carpeta: " . $upload_dir_discapacidad;
+            $carnet_discapacidad_imagen_path = NULL; // Reset path on error
+        } else {
+            // Guarda la ruta relativa al directorio del formulario para la DB
+            $carnet_discapacidad_imagen_path = 'form/discapacidad/' . $file_name;
+        }
+    } elseif ($tiene_discapacidad == 'Sí') {
+        $errores[] = "Debe subir la imagen del carnet de discapacidad si seleccionó 'Sí'.";
+    } else {
+        $carnet_discapacidad_imagen_path = NULL;
+    }
+
+    // Archivo de licencia de conducir
+    if ($tiene_licencia_conducir == 'Sí' && isset($_FILES['licencia_imagen']) && $_FILES['licencia_imagen']['error'] == UPLOAD_ERR_OK) {
+        $file_tmp_name = $_FILES['licencia_imagen']['tmp_name'];
+        $file_name = uniqid() . '_' . basename($_FILES['licencia_imagen']['name']);
+        $licencia_imagen_full_path = $upload_dir_licencia . $file_name;
+        if (!move_uploaded_file($file_tmp_name, $licencia_imagen_full_path)) {
+            $errores[] = "Error al subir la imagen de la licencia de conducir. Verifique permisos de la carpeta: " . $upload_dir_licencia;
+            $licencia_imagen_path = NULL; // Reset path on error
+        } else {
+            // Guarda la ruta relativa al directorio del formulario para la DB
+            $licencia_imagen_path = 'form/licencia/' . $file_name;
+        }
+    } elseif ($tiene_licencia_conducir == 'Sí') {
+        $errores[] = "Debe subir la imagen de la licencia de conducir si seleccionó 'Sí'.";
+    } else {
+        $licencia_imagen_path = NULL;
+    }
+
 
     // Validaciones (Ajustadas para validar solo la parte numérica)
     if (empty($nombres)) $errores[] = "Los nombres son obligatorios.";
     if (empty($apellidos)) $errores[] = "Los apellidos son obligatorios.";
 
-    // --- VALIDACIÓN CÉDULA: Solo la parte numérica ---
     if (empty($cedula_db) || !ctype_digit($cedula_db) || strlen($cedula_db) < 6 || strlen($cedula_db) > 9) {
         $errores[] = "La cédula de identidad es obligatoria y debe contener entre 6 y 9 dígitos numéricos.";
     }
-    // --- VALIDACIÓN RIF: Solo la parte numérica, asumiendo que el prefijo es un valor seleccionado del select ---
-    // Si el prefijo del RIF es importante para la validación (ej. J- para Jurídico), se puede añadir aquí
-    // Por ahora, solo validamos que el número del RIF sea correcto
     if (empty($rif_db) || !ctype_digit($rif_db) || strlen($rif_db) < 6 || strlen($rif_db) > 10) {
         $errores[] = "El RIF es obligatorio y debe contener entre 6 y 10 dígitos numéricos.";
     }
-    // Opcional: Si quieres validar que el prefijo del RIF fue seleccionado (no vacío)
     if (empty($rif_prefijo_post)) {
         $errores[] = "El prefijo del RIF es obligatorio.";
     }
-
 
     if (empty($genero)) $errores[] = "El género es obligatorio.";
     if (empty($fecha_nacimiento)) $errores[] = "La fecha de nacimiento es obligatoria.";
@@ -173,11 +236,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $errores[] = "Debe ingresar el número de teléfono secundario si seleccionó 'Sí'.";
     }
 
-    if (empty($nombre_emergencia)) $errores[] = "El nombre de contacto de emergencia es obligatorio.";
-    if (empty($apellido_emergencia)) $errores[] = "El apellido de contacto de emergencia es obligatorio.";
-    if (empty($telefono_emergencia) || !preg_match('/^\d{11}$/', $telefono_emergencia)) $errores[] = "El teléfono de contacto de emergencia es obligatorio y debe contener 11 dígitos numéricos.";
-    if (empty($direccion)) $errores[] = "La dirección es obligatoria.";
+    // Contacto de emergencia: Ya no son obligatorios, solo se valida el formato del teléfono si se proporciona.
+    if (!empty($telefono_emergencia) && !preg_match('/^\d{11}$/', $telefono_emergencia)) {
+        $errores[] = "El teléfono de contacto de emergencia debe contener 11 dígitos numéricos si se proporciona.";
+    }
+
+
+    // Nueva validación de geografía/dirección
+    if (empty($id_estado)) $errores[] = "Debe seleccionar un estado.";
+    if (empty($id_municipio)) $errores[] = "Debe seleccionar un municipio.";
+    if (empty($id_parroquia)) $errores[] = "Debe seleccionar una parroquia.";
+    if (empty($direccion)) $errores[] = "La dirección exacta es obligatoria.";
+
     if (empty($numero_seguro_social)) $errores[] = "El número de seguro social es obligatorio.";
+
+    // Validación de discapacidad
+    if ($tiene_discapacidad == 'Sí' && empty($detalle_discapacidad)) {
+        $errores[] = "Debe especificar el detalle de la discapacidad si seleccionó 'Sí'.";
+    }
+
+    // Validación de licencia de conducir
+    if ($tiene_licencia_conducir == 'Sí') {
+        if (empty($tipo_licencia)) {
+            $errores[] = "Debe seleccionar el tipo de licencia si seleccionó 'Sí'.";
+        }
+        if (empty($licencia_vencimiento)) {
+            $errores[] = "Debe ingresar la fecha de vencimiento de la licencia si seleccionó 'Sí'.";
+        }
+    }
+
 
     // Validación de fecha de nacimiento (mayor a 18 años)
     $fecha_nacimiento_dt = new DateTime($fecha_nacimiento);
@@ -217,11 +304,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     fecha_nacimiento, nacionalidad, correo_electronico, telefono_contacto,
                     telefono_contacto_secundario,
                     nombre_contacto_emergencia, apellido_contacto_emergencia,
-                    telefono_contacto_emergencia, tiene_discapacidad, detalle_discapacidad,
-                    tiene_licencia_conducir, detalle_licencia, numero_seguro_social, direccion
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    telefono_contacto_emergencia, tiene_discapacidad, detalle_discapacidad, carnet_discapacidad_imagen,
+                    tiene_licencia_conducir, tipo_licencia, licencia_vencimiento, licencia_imagen, numero_seguro_social,
+                    direccion, id_estado, id_municipio, id_parroquia
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-                $stmt->bind_param("ssssssssssssssssssss",
+                $stmt->bind_param("ssssssssssssssssssssssssss",
                     $nombres,
                     $apellidos,
                     $cedula_db, // Se guarda solo el número
@@ -238,10 +326,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $telefono_emergencia,
                     $tiene_discapacidad,
                     $detalle_discapacidad,
+                    $carnet_discapacidad_imagen_path,
                     $tiene_licencia_conducir,
-                    $detalle_licencia,
+                    $tipo_licencia,
+                    $licencia_vencimiento,
+                    $licencia_imagen_path,
                     $numero_seguro_social,
-                    $direccion
+                    $direccion,
+                    $id_estado,
+                    $id_municipio,
+                    $id_parroquia
                 );
 
                 if ($stmt->execute()) {
@@ -251,8 +345,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                 'personal_data_created',
                                 "Nuevo registro creado con ID: $id_pers\n" .
                                 "Nombre: $nombres $apellidos\n" .
-                                "Cédula: $cedula_db\n" . // Loguear solo el número
-                                "RIF: $rif_db");        // Loguear solo el número
+                                "Cédula: $cedula_db\n" .
+                                "RIF: $rif_db");
 
                     $_SESSION['mensaje'] = [
                         'titulo' => '¡Registro Exitoso!',
@@ -313,14 +407,13 @@ $conn->close();
             margin-bottom: 0;
             color: var(--primary-color);
         }
-        /* Ajustes para el input-group-custom del RIF */
         .input-group-custom .form-control {
             border-top-left-radius: 0;
             border-bottom-left-radius: 0;
         }
         .input-group-custom .form-select {
             flex: 0 0 auto;
-            width: auto; /* Permite que el select se ajuste a su contenido */
+            width: auto;
             border-top-right-radius: 0;
             border-bottom-right-radius: 0;
         }
@@ -366,7 +459,7 @@ $conn->close();
                 <?php unset($_SESSION['mensaje']); ?>
             <?php endif; ?>
 
-            <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>">
+            <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>" enctype="multipart/form-data">
                 <div class="form-section-header">
                     <h2><i class="bi bi-info-circle-fill me-2"></i>Información Básica</h2>
                 </div>
@@ -435,10 +528,33 @@ $conn->close();
                     </div>
                 </div>
 
+                <!-- NUEVA SECCIÓN DE DIRECCIÓN -->
                 <div class="mb-3">
-                    <label for="direccion" class="form-label">Dirección*:</label>
+                    <label for="id_estado" class="form-label">Estado*:</label>
+                    <select name="id_estado" id="id_estado" class="form-select" required>
+                        <option value="">Seleccione el estado...</option>
+                        <?php foreach ($estados as $estado): ?>
+                            <option value="<?= $estado['id_estado'] ?>" <?= ($id_estado == $estado['id_estado']) ? 'selected' : '' ?>><?= htmlspecialchars($estado['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="id_municipio" class="form-label">Municipio*:</label>
+                    <select name="id_municipio" id="id_municipio" class="form-select" required>
+                        <option value="">Seleccione el municipio...</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="id_parroquia" class="form-label">Parroquia*:</label>
+                    <select name="id_parroquia" id="id_parroquia" class="form-select" required>
+                        <option value="">Seleccione la parroquia...</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="direccion" class="form-label">Dirección exacta*:</label>
                     <input type="text" name="direccion" id="direccion" class="form-control" value="<?= htmlspecialchars($direccion) ?>" required>
                 </div>
+                <!-- FIN DE NUEVA SECCIÓN DE DIRECCIÓN -->
 
                 <div class="form-section-header mt-5">
                     <h2><i class="bi bi-file-person-fill me-2"></i>Datos Personales Adicionales</h2>
@@ -466,12 +582,12 @@ $conn->close();
                     <div class="radio-group">
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="discapacidad" id="discapacidad_si" value="Sí"
-                                   onchange="toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'Sí') ? 'checked' : '' ?> required>
+                                   onchange="toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true); toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'Sí') ? 'checked' : '' ?> required>
                             <label class="form-check-label" for="discapacidad_si">Sí</label>
                         </div>
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="discapacidad" id="discapacidad_no" value="No"
-                                   onchange="toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'No') ? 'checked' : '' ?>>
+                                   onchange="toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true); toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', this.value === 'Sí', true)" <?= ($tiene_discapacidad == 'No') ? 'checked' : '' ?>>
                             <label class="form-check-label" for="discapacidad_no">No</label>
                         </div>
                     </div>
@@ -484,26 +600,48 @@ $conn->close();
                     </div>
                 </div>
 
+                <div id="carnet-discapacidad-imagen-container" class="conditional-field d-none">
+                    <div class="mb-3">
+                        <label for="carnet_discapacidad_imagen" class="form-label">Foto del carnet de discapacidad*:</label>
+                        <input type="file" name="carnet_discapacidad_imagen" id="carnet_discapacidad_imagen" class="form-control" accept="image/*">
+                    </div>
+                </div>
+
                 <div class="mb-3">
                     <label class="form-label">¿Tiene licencia de conducir?*</label>
                     <div class="radio-group">
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="licencia" id="licencia_si" value="Sí"
-                                   onchange="toggleCampo('detalle-licencia', 'detalle_licencia', this.value === 'Sí', true)" <?= ($tiene_licencia_conducir == 'Sí') ? 'checked' : '' ?> required>
+                                   onchange="toggleCampo('licencia-details-container', ['tipo_licencia', 'licencia_vencimiento', 'licencia_imagen'], this.value === 'Sí', true)" <?= ($tiene_licencia_conducir == 'Sí') ? 'checked' : '' ?> required>
                             <label class="form-check-label" for="licencia_si">Sí</label>
                         </div>
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="licencia" id="licencia_no" value="No"
-                                   onchange="toggleCampo('detalle-licencia', 'detalle_licencia', this.value === 'Sí', true)" <?= ($tiene_licencia_conducir == 'No') ? 'checked' : '' ?>>
+                                   onchange="toggleCampo('licencia-details-container', ['tipo_licencia', 'licencia_vencimiento', 'licencia_imagen'], this.value === 'Sí', true)" <?= ($tiene_licencia_conducir == 'No') ? 'checked' : '' ?>>
                             <label class="form-check-label" for="licencia_no">No</label>
                         </div>
                     </div>
                 </div>
 
-                <div id="detalle-licencia" class="conditional-field d-none">
+                <div id="licencia-details-container" class="conditional-field d-none">
                     <div class="mb-3">
-                        <label for="detalle_licencia" class="form-label">Detalle de la licencia*:</label>
-                        <input type="text" name="detalle_licencia" id="detalle_licencia" class="form-control" value="<?= htmlspecialchars($detalle_licencia) ?>">
+                        <label for="tipo_licencia" class="form-label">Tipo de Licencia*:</label>
+                        <select name="tipo_licencia" id="tipo_licencia" class="form-select">
+                            <option value="">Seleccione el tipo...</option>
+                            <option value="Primera" <?= ($tipo_licencia == 'Primera') ? 'selected' : '' ?>>Primera</option>
+                            <option value="Segunda" <?= ($tipo_licencia == 'Segunda') ? 'selected' : '' ?>>Segunda</option>
+                            <option value="Tercera" <?= ($tipo_licencia == 'Tercera') ? 'selected' : '' ?>>Tercera</option>
+                            <option value="Cuarta" <?= ($tipo_licencia == 'Cuarta') ? 'selected' : '' ?>>Cuarta</option>
+                            <option value="Quinta" <?= ($tipo_licencia == 'Quinta') ? 'selected' : '' ?>>Quinta</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="licencia_vencimiento" class="form-label">Fecha de Vencimiento de Licencia*:</label>
+                        <input type="date" name="licencia_vencimiento" id="licencia_vencimiento" class="form-control" value="<?= htmlspecialchars($licencia_vencimiento) ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="licencia_imagen" class="form-label">Foto de la Licencia de Conducir*:</label>
+                        <input type="file" name="licencia_imagen" id="licencia_imagen" class="form-control" accept="image/*">
                     </div>
                 </div>
 
@@ -542,17 +680,17 @@ $conn->close();
 
                 <div class="row mb-3">
                     <div class="col-md-6 mb-3">
-                        <label for="nombre_emergencia" class="form-label">Nombre de Contacto de Emergencia*:</label>
-                        <input type="text" name="nombre_emergencia" id="nombre_emergencia" class="form-control" value="<?= htmlspecialchars($nombre_emergencia) ?>" required>
+                        <label for="nombre_emergencia" class="form-label">Nombre de Contacto de Emergencia:</label>
+                        <input type="text" name="nombre_emergencia" id="nombre_emergencia" class="form-control" value="<?= htmlspecialchars($nombre_emergencia) ?>">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label for="apellido_emergencia" class="form-label">Apellido de Contacto de Emergencia*:</label>
-                        <input type="text" name="apellido_emergencia" id="apellido_emergencia" class="form-control" value="<?= htmlspecialchars($apellido_emergencia) ?>" required>
+                        <label for="apellido_emergencia" class="form-label">Apellido de Contacto de Emergencia:</label>
+                        <input type="text" name="apellido_emergencia" id="apellido_emergencia" class="form-control" value="<?= htmlspecialchars($apellido_emergencia) ?>">
                     </div>
                 </div>
                 <div class="mb-3">
-                    <label for="telefono_emergencia" class="form-label">Teléfono de Contacto de Emergencia*:</label>
-                    <input type="tel" name="telefono_emergencia" id="telefono_emergencia" class="form-control" placeholder="Ej: 04169876543" pattern="[0-9]{11}" value="<?= htmlspecialchars($telefono_emergencia) ?>" required>
+                    <label for="telefono_emergencia" class="form-label">Teléfono de Contacto de Emergencia:</label>
+                    <input type="tel" name="telefono_emergencia" id="telefono_emergencia" class="form-control" placeholder="Ej: 04169876543" pattern="[0-9]{11}" value="<?= htmlspecialchars($telefono_emergencia) ?>">
                 </div>
 
                 <div class="d-grid gap-2 mt-4">
@@ -568,61 +706,64 @@ $conn->close();
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Función para alternar la visibilidad y requisitos de campos condicionales
-            // containerId: ID del div contenedor del campo (ej. 'detalle-discapacidad')
-            // inputId: ID del input dentro del contenedor (ej. 'detalle_discapacidad')
-            // show: booleano, true para mostrar, false para ocultar
-            // makeInputRequired: booleano, true para hacer el input requerido cuando se muestra
-            function toggleCampo(containerId, inputId, show, makeInputRequired = false) {
+            function toggleCampo(containerId, inputIds, show, makeInputRequired = false) {
                 const container = document.getElementById(containerId);
-                const input = document.getElementById(inputId);
-                if (!container || !input) return;
+                if (!container) return;
+
+                const idsArray = Array.isArray(inputIds) ? inputIds : [inputIds];
+                const inputs = idsArray.map(id => document.getElementById(id)).filter(Boolean);
 
                 if (show) {
                     container.classList.remove('d-none');
-                    input.removeAttribute('disabled');
-                    if (makeInputRequired) {
-                        input.setAttribute('required', 'required');
-                    }
+                    inputs.forEach(input => {
+                        input.removeAttribute('disabled');
+                        if (makeInputRequired) {
+                            input.setAttribute('required', 'required');
+                        }
+                    });
                 } else {
                     container.classList.add('d-none');
-                    input.setAttribute('disabled', 'disabled');
-                    input.removeAttribute('required');
-                    input.value = '';
+                    inputs.forEach(input => {
+                        input.setAttribute('disabled', 'disabled');
+                        input.removeAttribute('required');
+                        if (input.type !== 'file') { // No borrar el valor de los inputs de tipo file
+                            input.value = '';
+                        }
+                    });
                 }
             }
 
             // --- INICIALIZACIÓN DE CAMPOS CONDICIONALES AL CARGAR LA PÁGINA ---
-
-            // Discapacidad
             const discapacidadSiRadio = document.getElementById('discapacidad_si');
             if (discapacidadSiRadio) {
-                // Usar el valor actual del radio para inicializar
                 const initialDiscapacidad = document.querySelector('input[name="discapacidad"]:checked')?.value === 'Sí';
                 toggleCampo('detalle-discapacidad', 'detalle_discapacidad', initialDiscapacidad, true);
+                toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', initialDiscapacidad, true);
+
                 document.querySelectorAll('input[name="discapacidad"]').forEach(radio => {
                     radio.addEventListener('change', function() {
-                        toggleCampo('detalle-discapacidad', 'detalle_discapacidad', this.value === 'Sí', true);
+                        const isDiscapacidad = this.value === 'Sí';
+                        toggleCampo('detalle-discapacidad', 'detalle_discapacidad', isDiscapacidad, true);
+                        toggleCampo('carnet-discapacidad-imagen-container', 'carnet_discapacidad_imagen', isDiscapacidad, true);
                     });
                 });
             }
 
-            // Licencia
             const licenciaSiRadio = document.getElementById('licencia_si');
             if (licenciaSiRadio) {
-                // Usar el valor actual del radio para inicializar
                 const initialLicencia = document.querySelector('input[name="licencia"]:checked')?.value === 'Sí';
-                toggleCampo('detalle-licencia', 'detalle_licencia', initialLicencia, true);
+                toggleCampo('licencia-details-container', ['tipo_licencia', 'licencia_vencimiento', 'licencia_imagen'], initialLicencia, true);
+
                 document.querySelectorAll('input[name="licencia"]').forEach(radio => {
                     radio.addEventListener('change', function() {
-                        toggleCampo('detalle-licencia', 'detalle_licencia', this.value === 'Sí', true);
+                        const isLicencia = this.value === 'Sí';
+                        toggleCampo('licencia-details-container', ['tipo_licencia', 'licencia_vencimiento', 'licencia_imagen'], isLicencia, true);
                     });
                 });
             }
 
-            // Pasaporte
             const passportSiRadio = document.getElementById('passport_si');
             if (passportSiRadio) {
-                // Usar el valor actual del radio para inicializar
                 const initialPasaporte = document.querySelector('input[name="posee_pasaporte"]:checked')?.value === 'Sí';
                 toggleCampo('pasaporte_container', 'pasaporte_input', initialPasaporte, true);
                 document.querySelectorAll('input[name="posee_pasaporte"]').forEach(radio => {
@@ -631,21 +772,16 @@ $conn->close();
                     });
                 });
             }
-
-            // Teléfono Secundario
             const telefonoSecundarioSiRadio = document.getElementById('telefono_secundario_si');
             if (telefonoSecundarioSiRadio) {
-                // Usar el valor actual del radio para inicializar
                 const initialTelSecundario = document.querySelector('input[name="posee_telefono_secundario"]:checked')?.value === 'Sí';
-                toggleCampo('telefono_secundario_container', 'telefono_secundario', initialTelSecundario, false); // No es requerido, solo si se llena
+                toggleCampo('telefono_secundario_container', 'telefono_secundario', initialTelSecundario, false);
                 document.querySelectorAll('input[name="posee_telefono_secundario"]').forEach(radio => {
                     radio.addEventListener('change', function() {
                         toggleCampo('telefono_secundario_container', 'telefono_secundario', this.value === 'Sí', false);
                     });
                 });
             }
-
-            // Validación de Fecha de Nacimiento (mayor de 18 años)
             const fechaNacimientoInput = document.getElementById('fecha_nacimiento');
             if (fechaNacimientoInput) {
                 fechaNacimientoInput.addEventListener('change', function() {
@@ -656,12 +792,10 @@ $conn->close();
                     if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
                         age--;
                     }
-
                     const existingAlert = this.parentNode.querySelector('.alert-warning');
                     if (existingAlert) {
                         existingAlert.remove();
                     }
-
                     if (age < 18) {
                         const alertDiv = document.createElement('div');
                         alertDiv.classList.add('alert', 'alert-warning', 'mt-3');
@@ -671,6 +805,69 @@ $conn->close();
                         setTimeout(() => alertDiv.remove(), 5000);
                     }
                 });
+            }
+
+            // --- DIRECCIÓN: Selects dependientes ---
+            const estadoSelect = document.getElementById('id_estado');
+            const municipioSelect = document.getElementById('id_municipio');
+            const parroquiaSelect = document.getElementById('id_parroquia');
+
+            // Variables para mantener selección anterior (en caso de error y recarga)
+            let selectedMunicipio = "<?= htmlspecialchars($id_municipio) ?>";
+            let selectedParroquia = "<?= htmlspecialchars($id_parroquia) ?>";
+
+            function cargarMunicipios(id_estado, selected = "") {
+                municipioSelect.innerHTML = '<option value="">Cargando...</option>';
+                parroquiaSelect.innerHTML = '<option value="">Seleccione la parroquia...</option>';
+                if (id_estado) {
+                    fetch('ajax_municipios.php?id_estado=' + id_estado)
+                        .then(response => response.json())
+                        .then(data => {
+                            municipioSelect.innerHTML = '<option value="">Seleccione el municipio...</option>';
+                            data.forEach(function(municipio) {
+                                let sel = (municipio.id_municipio == selected) ? "selected" : "";
+                                municipioSelect.innerHTML += `<option value="${municipio.id_municipio}" ${sel}>${municipio.nombre}</option>`;
+                            });
+                            if (selected) {
+                                cargarParroquias(selected, selectedParroquia);
+                            }
+                        });
+                } else {
+                    municipioSelect.innerHTML = '<option value="">Seleccione el municipio...</option>';
+                }
+            }
+
+            function cargarParroquias(id_municipio, selected = "") {
+                parroquiaSelect.innerHTML = '<option value="">Cargando...</option>';
+                if (id_municipio) {
+                    fetch('ajax_parroquias.php?id_municipio=' + id_municipio)
+                        .then(response => response.json())
+                        .then(data => {
+                            parroquiaSelect.innerHTML = '<option value="">Seleccione la parroquia...</option>';
+                            data.forEach(function(parroquia) {
+                                let sel = (parroquia.id_parroquia == selected) ? "selected" : "";
+                                parroquiaSelect.innerHTML += `<option value="${parroquia.id_parroquia}" ${sel}>${parroquia.nombre}</option>`;
+                            });
+                        });
+                } else {
+                    parroquiaSelect.innerHTML = '<option value="">Seleccione la parroquia...</option>';
+                }
+            }
+
+            estadoSelect.addEventListener('change', function() {
+                cargarMunicipios(this.value);
+            });
+
+            municipioSelect.addEventListener('change', function() {
+                cargarParroquias(this.value);
+            });
+
+            // Si hay selección previa (POST con error), recarga municipios y parroquias
+            if (estadoSelect.value) {
+                cargarMunicipios(estadoSelect.value, selectedMunicipio);
+            }
+            if (municipioSelect.value) {
+                cargarParroquias(municipioSelect.value, selectedParroquia);
             }
         });
     </script>
