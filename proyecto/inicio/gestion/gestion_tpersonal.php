@@ -155,7 +155,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
 ?>
 
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -169,9 +169,50 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             --success-color: #28a745;
             --danger-color: #dc3545;
             --warning-color: #ffc107;
+            --table-bg: #fff;
+            --table-row-detail: #f8f9fa;
+        }
+        [data-theme="dark"] {
+            --primary-color: #8c7be7;
+            --secondary-color: #ff94e8;
+            --success-color: #22e67b;
+            --danger-color: #d75454;
+            --warning-color: #ffe066;
+            --table-bg: #23242a;
+            --table-row-detail: #181b20;
+        }
+        body {
+            background: #f7f9fc;
+            color: #232323;
+        }
+        [data-theme="dark"] body {
+            background: #15171c;
+            color: #e2e7ef;
+        }
+        .theme-toggle-btn {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 1101;
+            background: var(--table-bg);
+            border: 1px solid #b5b8c0;
+            color: #232323;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 10px #2222;
+            transition: background 0.2s, color 0.2s;
+        }
+        .theme-toggle-btn:hover {
+            background: var(--table-row-detail);
+            color: var(--secondary-color);
         }
         .data-table {
-            background: white;
+            background: var(--table-bg);
             border-radius: 15px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
             overflow: hidden;
@@ -185,6 +226,20 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             font-weight: 500;
             vertical-align: middle;
         }
+        .table td, .table th {
+            color: inherit;
+        }
+        [data-theme="dark"] .table th,
+        [data-theme="dark"] .table td,
+        [data-theme="dark"] .table tr {
+            border-color: #333 !important;
+            color: #e2e7ef !important;
+        }
+        [data-theme="light"] .table th,
+        [data-theme="light"] .table td,
+        [data-theme="light"] .table tr {
+            border-color: #dee2e6 !important;
+        }
         .action-btn {
             transition: all 0.3s ease;
             min-width: 100px;
@@ -195,6 +250,9 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             padding: 1.5rem;
             margin-bottom: 1.5rem;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        [data-theme="dark"] .search-container {
+            background-color: #23242a !important;
         }
         .stats-card {
             background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
@@ -215,6 +273,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
         .pagination .page-item.active .page-link {
             background-color: var(--secondary-color);
             border-color: var(--secondary-color);
+            color: #fff;
         }
         .pagination .page-link {
             color: var(--primary-color);
@@ -227,8 +286,19 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             background-color: #258cd1;
             border-color: #258cd1;
         }
-        .table-hover tbody tr:hover {
-            background-color: rgba(52, 152, 219, 0.05);
+        [data-theme="dark"] .btn-primary {
+            background-color: #8c7be7 !important;
+            border-color: #8c7be7 !important;
+            color: #fff !important;
+        }
+        .btn-outline-secondary {
+            border-color: var(--secondary-color);
+            color: var(--secondary-color);
+        }
+        [data-theme="dark"] .btn-outline-secondary {
+            border-color: #bab8fa !important;
+            color: #bab8fa !important;
+            background: none !important;
         }
         .employee-badge {
             background-color: #4e73df;
@@ -236,6 +306,10 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             padding: 8px 12px;
             border-radius: 20px;
             font-size: 0.9rem;
+        }
+        [data-theme="dark"] .employee-badge {
+            background-color: #8c7be7 !important;
+            color: #23242a !important;
         }
         .nav-tabs .nav-link {
             border: none;
@@ -246,9 +320,36 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             border-bottom: 3px solid var(--secondary-color);
             color: var(--secondary-color);
         }
+        [data-theme="dark"] .nav-tabs .nav-link {
+            background: none !important;
+            color: #bab8fa !important;
+        }
+        [data-theme="dark"] .nav-tabs .nav-link.active {
+            background: none !important;
+            color: #ff94e8 !important;
+            border-bottom: 3px solid #ff94e8 !important;
+        }
+        [data-theme="dark"] .alert {
+            background: #23242a;
+            color: #ff94e8;
+            border-color: #ff94e8;
+        }
+        [data-theme="dark"] .form-control {
+            background: #181b20 !important;
+            color: #e2e7ef !important;
+            border-color: #393b3f !important;
+        }
+        [data-theme="dark"] .form-control::placeholder {
+            color: #b5b8c0 !important;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
+<!-- BOTÓN MODO OSCURO/MODO CLARO -->
+<button class="theme-toggle-btn" id="themeToggleBtn" title="Cambiar modo" aria-label="Cambiar modo claro/oscuro">
+    <i id="themeToggleIcon" class="fas fa-moon"></i>
+</button>
     <div class="container py-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="mb-0"><i class="fas fa-users-cog me-2"></i>Tipos de Personal</h1>
@@ -477,6 +578,25 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                 bootstrap.Alert.getOrCreateInstance(alert).close();
             });
         }, 5000);
+
+        // Toggle modo claro/oscuro
+        document.addEventListener('DOMContentLoaded', function () {
+            var themeToggleBtn = document.getElementById('themeToggleBtn');
+            var themeToggleIcon = document.getElementById('themeToggleIcon');
+            var htmlTag = document.documentElement;
+
+            let theme = localStorage.getItem('theme') || 'light';
+            htmlTag.setAttribute('data-theme', theme);
+            themeToggleIcon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+
+            themeToggleBtn.addEventListener('click', function() {
+                let current = htmlTag.getAttribute('data-theme');
+                let next = current === 'dark' ? 'light' : 'dark';
+                htmlTag.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                themeToggleIcon.className = next === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            });
+        });
     </script>
 </body>
 </html>
