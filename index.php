@@ -275,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="auth-container fade-in">
             <div class="auth-header">
                 <img src="/proyecto/inicio/img/logo-sapnna.png" alt="Logo pequeño">
-                <h2>SGITH</h2>
+                <h2>SGITH-WEB</h2>
                 <small>Inicia sesión para continuar</small>
             </div>
             <form class="auth-form" method="POST" id="loginForm" autocomplete="off">
