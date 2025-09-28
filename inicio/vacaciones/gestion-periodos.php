@@ -1,7 +1,6 @@
 <?php
 session_start();
 require '../conexion.php';
-require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
 
 $errores = [];
 $datos_empleado = null;
@@ -51,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['seleccionar_empleado'
 // Procesar búsqueda de empleado (por cédula)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_cedula'])) {
     $cedula = trim($_POST['cedula']);
+    $cedula = preg_replace('/\D/', '', $cedula); // Limpiar cédula
     if (!is_numeric($cedula)) {
         $errores[] = "La cédula debe contener solo números.";
     } else {
@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_cedula'])) {
     }
 }
 
-// Procesar edición de período (sin cambios)
+// Procesar edición de período (cambiar estado)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editar_periodo'])) {
     $id_periodo = $_POST['id_periodo_edit'];
     $nuevo_estado = $_POST['estado_periodo_edit'];
@@ -129,6 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editar_periodo'])) {
 // Si la página se carga con una cédula en el GET (después de una edición), procesarla
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['cedula'])) {
     $cedula = trim($_GET['cedula']);
+    $cedula = preg_replace('/\D/', '', $cedula); // Limpiar cédula
     if (!is_numeric($cedula)) {
         $errores[] = "La cédula debe contener solo números.";
     } else {
@@ -361,7 +362,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['cedula'])) {
                                     </td>
                                     <td><?= htmlspecialchars($periodo['institucion']) ?></td>
                                     <td>
-                                        <!-- Aquí puedes agregar botón de editar si lo necesitas -->
+                                        <?php if ($periodo['estado'] === 'activo' || $periodo['estado'] === 'usado'): ?>
+                                            <form method="POST" style="display:inline;">
+                                                <input type="hidden" name="id_periodo_edit" value="<?= $periodo['id_periodo'] ?>">
+                                                <input type="hidden" name="estado_periodo_edit" value="<?= $periodo['estado'] === 'activo' ? 'usado' : 'activo' ?>">
+                                                <input type="hidden" name="dias_asignados_edit" value="<?= $periodo['dias_asignados'] ?>">
+                                                <input type="hidden" name="dias_usados_edit" value="<?= $periodo['dias_usados'] ?>">
+                                                <input type="hidden" name="id_pers_edit" value="<?= $datos_empleado['id_pers'] ?>">
+                                                <input type="hidden" name="cedula_busqueda_hidden" value="<?= $datos_empleado['cedula'] ?>">
+                                                <button type="submit" name="editar_periodo" class="btn btn-sm btn-warning">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                    Cambiar a <?= $periodo['estado'] === 'activo' ? 'Usado' : 'Activo' ?>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>

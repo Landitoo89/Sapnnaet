@@ -15,8 +15,8 @@ function log_session_event($user_id, $event_type, $details = '') {
     $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
     $details = substr($details, 0, 500);
 
-    $stmt = $conexion->prepare("INSERT INTO session_logs 
-                               (user_id, event_type, ip_address, user_agent, details) 
+    $stmt = $conexion->prepare("INSERT INTO session_logs
+                               (user_id, event_type, ip_address, user_agent, details)
                                VALUES (?, ?, ?, ?, ?)");
 
     if (!$stmt) {
@@ -173,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .auth-header img {
             display: block;
             margin: 0 auto 0.45rem auto;
-            width: 3.3rem;
+            width: 7rem; /* Originalmente 3.3rem */
             filter: drop-shadow(0 2px 10px #2223);
         }
         .auth-header h2 {
@@ -278,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <h2>SGITH-WEB</h2>
                 <small>Inicia sesión para continuar</small>
             </div>
-            <form class="auth-form" method="POST" id="loginForm" autocomplete="off">
+            <form class="auth-form" method="POST" id="loginForm" autocomplete="on">
                 <?php if (!empty($errores)): ?>
                     <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
                         <i class="fas fa-exclamation-circle me-2"></i>

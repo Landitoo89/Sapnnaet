@@ -1,7 +1,23 @@
 <?php
 session_start();
 require '../conexion.php';
+require_once 'actualizar_estado_laboral.php';
 require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
+
+// ACTUALIZAR AUTOMÁTICAMENTE REPOSOS CULMINADOS AL INGRESAR
+try {
+    // 1. Reposos activos cuya fecha de fin ya pasó: poner al empleado en "activo" y al reposo en "cumplido"
+    $update_reposo = $conn->prepare("
+        UPDATE datos_laborales dl
+        INNER JOIN reposos r ON dl.id_pers = r.id_pers
+        SET dl.estado = 'activo', r.estado = 'cumplido'
+        WHERE r.estado = 'activo'
+          AND r.fecha_fin < CURDATE()
+    ");
+    $update_reposo->execute();
+} catch (PDOException $e) {
+    // Puedes mostrar un mensaje, pero no es necesario si solo actualizas
+}
 
 $rol = $_SESSION['usuario']['rol'] ?? '';
 

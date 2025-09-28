@@ -2,7 +2,6 @@
 session_start();
 require __DIR__ . '/conexion/conexion_db.php';
 
-
 // ===== VERIFICACIÓN DE SESIÓN Y ROL SOLO ADMIN =====
 if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'admin') {
     header('Location: ../index.php');
@@ -41,6 +40,30 @@ function getTiposPersonal($pdo) {
     $stmt = $pdo->query("SELECT id_tipo_personal, nombre FROM tipos_personal ORDER BY nombre");
     return $stmt->fetchAll();
 }
+function getEstados($pdo) {
+    $stmt = $pdo->query("SELECT id_estado, nombre FROM estados ORDER BY nombre");
+    return $stmt->fetchAll();
+}
+function getMunicipios($pdo, $estado_id = null) {
+    if ($estado_id) {
+        $stmt = $pdo->prepare("SELECT id_municipio, nombre FROM municipios WHERE id_estado = ? ORDER BY nombre");
+        $stmt->execute([$estado_id]);
+        return $stmt->fetchAll();
+    } else {
+        $stmt = $pdo->query("SELECT id_municipio, nombre FROM municipios ORDER BY nombre");
+        return $stmt->fetchAll();
+    }
+}
+function getParroquias($pdo, $municipio_id = null) {
+    if ($municipio_id) {
+        $stmt = $pdo->prepare("SELECT id_parroquia, nombre FROM parroquias WHERE id_municipio = ? ORDER BY nombre");
+        $stmt->execute([$municipio_id]);
+        return $stmt->fetchAll();
+    } else {
+        $stmt = $pdo->query("SELECT id_parroquia, nombre FROM parroquias ORDER BY nombre");
+        return $stmt->fetchAll();
+    }
+}
 
 if (isset($_GET['filtro'])) {
     header('Content-Type: application/json; charset=utf-8');
@@ -57,13 +80,23 @@ if (isset($_GET['filtro'])) {
         case 'tipos_personal':
             echo json_encode(getTiposPersonal($pdo));
             break;
+        case 'estados':
+            echo json_encode(getEstados($pdo));
+            break;
+        case 'municipios':
+            $estado_id = $_GET['estado_id'] ?? null;
+            echo json_encode(getMunicipios($pdo, $estado_id));
+            break;
+        case 'parroquias':
+            $municipio_id = $_GET['municipio_id'] ?? null;
+            echo json_encode(getParroquias($pdo, $municipio_id));
+            break;
         default:
             echo json_encode([]);
     }
     exit;
 }
 require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
-
 ?>
 <!DOCTYPE html>
 <html lang="es" data-theme="light">
@@ -150,13 +183,6 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             transform: scale(1.018);
             color: #fff;
         }
-        #filtrosDinamicos > div, #filtrosDinamicos > .row {
-            animation: slideInFade 0.38s cubic-bezier(.6,1.6,.5,1) both;
-        }
-        @keyframes slideInFade {
-            0% { opacity: 0; transform: translateY(16px);}
-            100% { opacity: 1; transform: none;}
-        }
         .report-tips {
             background: #f4f7fe;
             border-left: 5px solid #4f6cf7;
@@ -188,8 +214,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             .report-title {font-size: 1.3rem;}
             .report-tips {font-size: 0.97rem;}
         }
-
-        /* MODO OSCURO */
+        /* MODO OSCURO ... igual que antes ... */
         [data-theme="dark"] body {
             background: linear-gradient(120deg,#181924 0%,#23242a 100%) fixed;
             color: #e2e7ef;
@@ -242,7 +267,6 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
         [data-theme="dark"] .report-tips i {
             color: #ff94e8;
         }
-        /* Bordes claros en modo claro, oscuros en modo oscuro para inputs y selects */
         [data-theme="light"] .form-select,
         [data-theme="light"] .form-control {
             border-color: #e0e7ef !important;
@@ -259,7 +283,6 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
     <i id="themeToggleIcon" class="fas fa-moon"></i>
 </button>
     <div class="container">
-        <!-- ... el resto de tu HTML sin cambios ... -->
         <div class="row justify-content-center">
             <div class="col-lg-9 col-md-11">
                 <div class="report-panel shadow-sm">
@@ -267,13 +290,17 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                         <i class="fas fa-chart-bar"></i>
                         Generador de Reportes
                     </h2>
-                    <form id="reporteForm" action="generar_reporte.php" method="POST" target="_blank" autocomplete="off">   
-                        <!-- Tipo de reporte -->
+                    <!-- Formulario único PDF/CSV -->
+                    <form id="reporteForm" action="generar_reporte.php" method="POST" target="_blank" autocomplete="off">
                         <div class="mb-3">
                             <label for="tipoReporte" class="form-label">Tipo de Reporte</label>
                             <select name="tipoReporte" id="tipoReporte" class="form-select" required>
                                 <option value="" selected disabled>Seleccione tipo de reporte</option>
                                 <option value="general">Listado General de Empleados</option>
+                                <option value="por_estado_personal">Por Estado</option>
+                                <option value="por_municipio_personal">Por Municipio</option>
+                                <option value="por_parroquia_personal">Por Parroquia</option>
+                                <!-- el resto igual que antes -->
                                 <option value="por_departamento">Por Departamento</option>
                                 <option value="por_coordinacion">Por Coordinación</option>
                                 <option value="por_cargo">Por Cargo</option>
@@ -283,31 +310,38 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                                 <option value="reposo">Empleados en Reposo</option>
                                 <option value="carga_familiar">Empleados con Carga Familiar</option>
                                 <option value="auditoria">Auditoría (Logs de acciones)</option>
+                                <option value="toda_bd_csv">Exportar toda la base de datos (CSV)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tipoExportacion" class="form-label">Formato de Exportación</label>
+                            <select name="tipoExportacion" id="tipoExportacion" class="form-select" required>
+                                <option value="pdf" selected>PDF</option>
+                                <option value="csv">CSV</option>
                             </select>
                         </div>
                         <div id="filtrosDinamicos"></div>
                         <div class="divider"></div>
                         <div class="d-flex justify-content-end">
                             <button type="submit" class="btn btn-primary btn-lg" id="btnGenerarReporte">
-                                <i class="fas fa-file-pdf me-2"></i>Generar PDF
+                                <i class="fas fa-file-export me-2"></i>Generar Reporte
                             </button>
                         </div>
-                        <div class="report-tips mt-4">
-                            <strong><i class="fas fa-info-circle"></i>Recomendaciones:</strong>
-                            <ul>
-                                <li>Seleccione primero el <b>tipo de reporte</b> para mostrar los filtros disponibles.</li>
-                                <li>Los filtros adicionales (departamento, cargo, fechas, etc.) aparecerán según su selección.</li>
-                                <li>El reporte se generará en formato PDF y se abrirá en una nueva pestaña.</li>
-                                <li>Si desea un periodo específico, utilice los campos de fecha cuando estén disponibles.</li>
-                                <li>Los reportes pueden demorar algunos segundos si hay muchos registros.</li>
-                            </ul>
-                        </div>
                     </form>
+                    <div class="report-tips mt-4">
+                        <strong><i class="fas fa-info-circle"></i>Recomendaciones:</strong>
+                        <ul>
+                            <li>Seleccione primero el <b>tipo de reporte</b> para mostrar los filtros disponibles.</li>
+                            <li>Los filtros adicionales (departamento, cargo, fechas, etc.) aparecerán según su selección.</li>
+                            <li>El reporte se generará en el formato elegido y se abrirá en una nueva pestaña.</li>
+                            <li>Si desea un periodo específico, utilice los campos de fecha cuando estén disponibles.</li>
+                            <li>Los reportes pueden demorar algunos segundos si hay muchos registros.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-
     <!-- Font Awesome & Bootstrap JS -->
     <script src="https://kit.fontawesome.com/8c6e3f1aeb.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -317,11 +351,9 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
         var themeToggleBtn = document.getElementById('themeToggleBtn');
         var themeToggleIcon = document.getElementById('themeToggleIcon');
         var htmlTag = document.documentElement;
-
         let theme = localStorage.getItem('theme') || 'light';
         htmlTag.setAttribute('data-theme', theme);
         themeToggleIcon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-
         themeToggleBtn.addEventListener('click', function() {
             let current = htmlTag.getAttribute('data-theme');
             let next = current === 'dark' ? 'light' : 'dark';
@@ -331,21 +363,73 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
         });
     });
 
-    // Cargar filtros y validaciones (igual que tu código original)
-    async function cargarOpciones(filtro, selectId, valueKey='id', labelKey='nombre') {
-        const res = await fetch('reportes.php?filtro=' + filtro);
+    // ----- Filtros dinámicos -----
+    async function cargarOpciones(filtro, selectElem, valueKey='id', labelKey='nombre', extraParams = {}) {
+        let url = 'reportes.php?filtro=' + filtro;
+        if (extraParams.estado_id) url += '&estado_id=' + extraParams.estado_id;
+        if (extraParams.municipio_id) url += '&municipio_id=' + extraParams.municipio_id;
+        const res = await fetch(url);
         const data = await res.json();
         let html = `<option value="" selected disabled>Seleccione...</option>`;
         data.forEach(obj => {
             html += `<option value="${obj[valueKey]}">${obj[labelKey]}</option>`;
         });
-        document.getElementById(selectId).innerHTML = html;
+        selectElem.innerHTML = html;
     }
 
     function renderFiltros(tipo) {
         const cont = document.getElementById('filtrosDinamicos');
         cont.innerHTML = '';
 
+        if (tipo === 'por_estado_personal') {
+            cont.innerHTML += `
+                <div class="mb-3">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" id="estado_personal" name="estado_personal"></select>
+                </div>
+            `;
+            setTimeout(() => cargarOpciones('estados', document.getElementById('estado_personal'), 'id_estado', 'nombre'), 100);
+        }
+        if (tipo === 'por_municipio_personal') {
+            cont.innerHTML += `
+                <div class="mb-3">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" id="estado_personal_mun" name="estado_personal_mun"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Municipio</label>
+                    <select class="form-select" id="municipio_personal" name="municipio_personal"></select>
+                </div>
+            `;
+            setTimeout(() => cargarOpciones('estados', document.getElementById('estado_personal_mun'), 'id_estado', 'nombre'), 100);
+            document.getElementById('estado_personal_mun').addEventListener('change', function() {
+                cargarOpciones('municipios', document.getElementById('municipio_personal'), 'id_municipio', 'nombre', {estado_id: this.value});
+            });
+        }
+        if (tipo === 'por_parroquia_personal') {
+            cont.innerHTML += `
+                <div class="mb-3">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" id="estado_personal_parr" name="estado_personal_parr"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Municipio</label>
+                    <select class="form-select" id="municipio_personal_parr" name="municipio_personal_parr"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Parroquia</label>
+                    <select class="form-select" id="parroquia_personal" name="parroquia_personal"></select>
+                </div>
+            `;
+            setTimeout(() => cargarOpciones('estados', document.getElementById('estado_personal_parr'), 'id_estado', 'nombre'), 100);
+            document.getElementById('estado_personal_parr').addEventListener('change', function() {
+                cargarOpciones('municipios', document.getElementById('municipio_personal_parr'), 'id_municipio', 'nombre', {estado_id: this.value});
+            });
+            document.getElementById('municipio_personal_parr').addEventListener('change', function() {
+                cargarOpciones('parroquias', document.getElementById('parroquia_personal'), 'id_parroquia', 'nombre', {municipio_id: this.value});
+            });
+        }
+        // ... el resto igual que antes ...
         if (tipo === 'por_departamento') {
             cont.innerHTML += `
                 <div class="mb-3">
@@ -353,7 +437,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                     <select class="form-select" id="departamento" name="departamento"></select>
                 </div>
             `;
-            setTimeout(() => cargarOpciones('departamentos', 'departamento', 'id_departamento', 'nombre'), 100);
+            setTimeout(() => cargarOpciones('departamentos', document.getElementById('departamento'), 'id_departamento', 'nombre'), 100);
         }
         if (tipo === 'por_coordinacion') {
             cont.innerHTML += `
@@ -362,7 +446,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                     <select class="form-select" id="coordinacion" name="coordinacion"></select>
                 </div>
             `;
-            setTimeout(() => cargarOpciones('coordinaciones', 'coordinacion', 'id_coordinacion', 'nombre'), 100);
+            setTimeout(() => cargarOpciones('coordinaciones', document.getElementById('coordinacion'), 'id_coordinacion', 'nombre'), 100);
         }
         if (tipo === 'por_cargo') {
             cont.innerHTML += `
@@ -371,7 +455,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                     <select class="form-select" id="cargo" name="cargo"></select>
                 </div>
             `;
-            setTimeout(() => cargarOpciones('cargos', 'cargo', 'id_cargo', 'nombre'), 100);
+            setTimeout(() => cargarOpciones('cargos', document.getElementById('cargo'), 'id_cargo', 'nombre'), 100);
         }
         if (tipo === 'por_tipo_personal') {
             cont.innerHTML += `
@@ -380,7 +464,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                     <select class="form-select" id="tipo_personal" name="tipo_personal"></select>
                 </div>
             `;
-            setTimeout(() => cargarOpciones('tipos_personal', 'tipo_personal', 'id_tipo_personal', 'nombre'), 100);
+            setTimeout(() => cargarOpciones('tipos_personal', document.getElementById('tipo_personal'), 'id_tipo_personal', 'nombre'), 100);
         }
         if (tipo === 'por_estado') {
             cont.innerHTML += `
@@ -413,13 +497,32 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
     }
 
     document.getElementById('tipoReporte').addEventListener('change', function() {
-        renderFiltros(this.value);
+        var formato = document.getElementById('tipoExportacion');
+        var filtros = document.getElementById('filtrosDinamicos');
+        if (this.value === 'toda_bd_csv') {
+            formato.value = 'csv';
+            formato.setAttribute('disabled', 'disabled');
+            filtros.innerHTML = '';
+        } else {
+            formato.removeAttribute('disabled');
+            renderFiltros(this.value);
+        }
     });
 
     document.getElementById('reporteForm').addEventListener('submit', function(e) {
-        if (!document.getElementById('tipoReporte').value) {
+        var tipoReporte = document.getElementById('tipoReporte').value;
+        var tipoExportacion = document.getElementById('tipoExportacion').value;
+        if (!tipoReporte) {
             e.preventDefault();
             alert('Seleccione el tipo de reporte.');
+            return;
+        }
+        if (tipoReporte === 'toda_bd_csv') {
+            this.action = 'generar_csv.php';
+        } else if (tipoExportacion === 'csv') {
+            this.action = 'generar_csv.php';
+        } else {
+            this.action = 'generar_reporte.php';
         }
     });
     </script>
