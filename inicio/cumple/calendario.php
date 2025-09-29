@@ -508,32 +508,6 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                                         <dd class="col-sm-8">${data.telefono_contacto ?? 'N/A'}</dd>
                                         <dt class="col-sm-4">Dirección:</dt>
                                         <dd class="col-sm-8">${data.direccion ?? 'N/A'}</dd>
-                                        <dt class="col-sm-4">Contacto Emergencia:</dt>
-                                        <dd class="col-sm-8">
-                                            ${data.nombre_contacto_emergencia ?? ''} 
-                                            ${data.apellido_contacto_emergencia ?? ''} 
-                                            (${data.telefono_contacto_emergencia ?? 'N/A'})
-                                        </dd>
-                                        ${data.tiene_discapacidad === 'Sí' ? `
-                                        <dt class="col-sm-4">Discapacidad:</dt>
-                                        <dd class="col-sm-8">${data.detalle_discapacidad ?? 'Sí'}</dd>
-                                        ` : ''}
-                                        ${data.tiene_licencia_conducir === 'Sí' ? `
-                                        <dt class="col-sm-4">Licencia Conducir:</dt>
-                                        <dd class="col-sm-8">${data.detalle_licencia ?? 'Sí'}</dd>
-                                        ` : ''}
-                                        ${data.numero_seguro_social ? `
-                                        <dt class="col-sm-4">Número Seguro Social:</dt>
-                                        <dd class="col-sm-8">${data.numero_seguro_social}</dd>
-                                        ` : ''}
-                                        ${data.pasaporte ? `
-                                        <dt class="col-sm-4">Pasaporte:</dt>
-                                        <dd class="col-sm-8">${data.pasaporte}</dd>
-                                        ` : ''}
-                                        ${data.rif ? `
-                                        <dt class="col-sm-4">RIF:</dt>
-                                        <dd class="col-sm-8">${data.rif}</dd>
-                                        ` : ''}
                                     </dl>
                                 </div>
                             </div>
