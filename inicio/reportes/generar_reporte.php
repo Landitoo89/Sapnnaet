@@ -1,9 +1,9 @@
-<?php
+﻿<?php
 require __DIR__ . '/conexion/conexion_db.php';
 require_once('fpdf/fpdf.php');
 
-// Ruta del membrete institucional (ajústala si es necesario)
-$membrete_path = __DIR__ . '\\logogob.jpg';
+// Detectar formato solicitado (PDF o Excel/CSV)
+$formato = $_POST['formatoReporte'] ?? 'pdf';
 $tipo = $_POST['tipoReporte'] ?? '';
 
 // --- Construir la consulta y encabezados según el tipo de reporte ---
@@ -164,10 +164,11 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $registros = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// LOG de generación de reporte
 session_start();
 if (isset($_SESSION['usuario']['id'])) {
     $user_id = $_SESSION['usuario']['id'];
-    $event_type = 'generacion_reporte_pdf';
+    $event_type = 'generacion_reporte_' . $formato;
     $details = 'Generación de reporte: ' . ($title ?? $tipo ?? '');
     $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
     $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
@@ -177,7 +178,34 @@ if (isset($_SESSION['usuario']['id'])) {
     $stmt_log->close();
 }
 
-// --- Clase FPDF extendida para encabezado y filas alineadas ---
+// --- GENERAR CSV MEJORADO ---
+if ($formato === 'excel') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="reporte.csv"');
+    // SOLO este BOM en el output, nunca en el archivo PHP
+    echo "\xEF\xBB\xBF";
+    $output = fopen('php://output', 'w');
+    fputcsv($output, $headers, ';'); // Punto y coma para Excel español
+    foreach ($registros as $row) {
+        $fila = [];
+        foreach ($campos as $k) {
+            $valor = $row[$k] ?? '';
+            if (preg_match('/^\d{4}-\d{2}-\d{2}/', $valor)) {
+                $valor = date('d/m/Y', strtotime($valor));
+            }
+            // Si algún valor viene mal, lo puedes forzar:
+            // $valor = mb_convert_encoding($valor, 'UTF-8', 'auto');
+            $fila[] = $valor;
+        }
+        fputcsv($output, $fila, ';');
+    }
+    fclose($output);
+    exit;
+}
+
+// --- GENERAR PDF ---
+$membrete_path = __DIR__ . '\\logogob.jpg';
+
 class PDF_MC_Table extends FPDF
 {
     var $widths;
@@ -210,14 +238,14 @@ class PDF_MC_Table extends FPDF
         }
         // Título centrado
         $titulo = $this->title ?? '';
-        $this->SetFont('Arial', 'B', 14); // Cambia aquí el tamaño del TÍTULO
+        $this->SetFont('Arial', 'B', 14);
         $this->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', (string)$titulo), 0, 1, 'C');
         $this->Ln(2);
 
         // Encabezado de la tabla
         $this->SetFillColor(44, 62, 80);
         $this->SetTextColor(255,255,255);
-        $this->SetFont('Arial','B',10);   // Cambia aquí el tamaño de letra del ENCABEZADO
+        $this->SetFont('Arial','B',10);
         $this->SetDrawColor(160,160,160);
         $this->SetX($this->headerStartX ?? 10);
         foreach (($this->headers ?? []) as $i => $header) {
@@ -227,7 +255,7 @@ class PDF_MC_Table extends FPDF
         }
         $this->Ln();
         $this->SetTextColor(44,62,80);
-        $this->SetFont('Arial','',9);    // Cambia aquí el tamaño de letra de los DATOS
+        $this->SetFont('Arial','',9);
     }
 
     function Row($data, $startX)
@@ -291,8 +319,6 @@ class PDF_MC_Table extends FPDF
 }
 
 $pdf = new PDF_MC_Table();
-
-// Márgenes manuales (ajusta si quieres más o menos margen)
 $margen_izquierdo = 0;
 $margen_derecho = 505;
 $pageWidth = $pdf->GetPageWidth();
@@ -300,12 +326,11 @@ $totalWidth = array_sum($widths);
 $areaImprimible = $pageWidth - $margen_izquierdo - $margen_derecho;
 $startX = $margen_izquierdo + ($areaImprimible - $totalWidth) / 2;
 
-// Pasa el startX calculado
 $pdf->SetTableFormat($headers, $widths, $startX, $title, $membrete_path);
 $pdf->AddPage('L', 'A4');
 $pdf->SetWidths($widths);
 $pdf->SetAligns(array_fill(0, count($widths), 'L'));
-// Filas de datos
+
 foreach ($registros as $row) {
     $fila = [];
     foreach ($campos as $i => $k) {
