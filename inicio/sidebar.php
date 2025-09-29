@@ -171,7 +171,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
     }
     .sidebar.collapsed .logout-fixed .menu-link span { display: none; }
     .sidebar.collapsed .logout-fixed .menu-link { justify-content: center; }
-    /* Flecha minimalista fuera del sidebar */
     .toggle-btn-minimal {
       position: fixed;
       top: 28px;
@@ -193,7 +192,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
     .toggle-btn-minimal:hover { color: #0056b3; }
     .toggle-btn-minimal i { font-size: 1.5em; }
     .sidebar.collapsed ~ .toggle-btn-minimal { left: 68px; }
-    /* Overlay para mobile */
     .sidebar-overlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(0,0,0,0.2); z-index: 999; display: none;
@@ -203,6 +201,95 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
     .submenu-arrow { margin-left: auto; transition: transform 0.2s; }
     .submenu-arrow.open { transform: rotate(90deg); }
     .menu-item:focus-visible, .menu-link:focus-visible { outline: 2px solid #007bff; }
+    /* Loader Overlay */
+    #loaderOverlay {
+      display: none;
+      position: fixed;
+      z-index: 20000;
+      inset: 0;
+      background: rgba(30,34,60,0.16);
+      justify-content: center;
+      align-items: center;
+    }
+    .loader-container {
+      background: #fff;
+      border-radius: 1.5rem;
+      box-shadow: 0 6px 34px 0 rgba(67, 56, 202, 0.14);
+      padding: 2.2rem 2.7rem;
+      min-width: 340px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.2rem;
+      position: relative;
+    }
+    .logo-spinner-wrapper {
+      position: relative;
+      width: 144px;
+      height: 144px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.3rem;
+    }
+    .loader-logo {
+      width: 100px;
+      height: 100px;
+      object-fit: contain;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 2px 10px #8883;
+      z-index: 2;
+      animation: pulseLogo 1.2s infinite alternate;
+    }
+    @keyframes pulseLogo {
+      0% { box-shadow: 0 2px 10px #8882; transform: translate(-50%, -50%) scale(1);}
+      100% { box-shadow: 0 6px 28px #4538b555; transform: translate(-50%, -50%) scale(1.07);}
+    }
+    .progress-spinner {
+      position: absolute;
+      left: 0; top: 0;
+      width: 144px;
+      height: 144px;
+      z-index: 1;
+      transform: rotate(-90deg);
+    }
+    .progress-spinner__circle-bg {
+      stroke: #e0e7ff;
+      stroke-width: 8;
+    }
+    .progress-spinner__circle {
+      stroke: #4538b5;
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 410;
+      stroke-dashoffset: 410;
+      animation: dashdraw 1.2s cubic-bezier(.65,.05,.36,1) forwards, dashspin 1.0s linear 1.2s infinite;
+      transform-origin: 50% 50%;
+    }
+    @keyframes dashdraw {
+      0% { stroke-dashoffset: 410; }
+      100% { stroke-dashoffset: 0; }
+    }
+    @keyframes dashspin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+    .loader-title {
+      font-size: 1.45rem;
+      font-weight: 900;
+      color: #4538b5;
+      letter-spacing: .5px;
+      text-align: center;
+    }
+    .loader-text {
+      font-size: 1.07rem;
+      color: #232323;
+      text-align: center;
+    }
     @media (max-width: 700px) {
       .sidebar {width: 95vw; min-width: 0; max-width: 95vw;}
       .sidebar.collapsed {width: 58px;}
@@ -210,15 +297,32 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
       .sidebar.collapsed ~ .toggle-btn-minimal { left: 58px;}
       .profile-info .profile-name, .profile-info .profile-mail { max-width: 60vw; }
       .profile-clock { font-size: 1em; }
+      .loader-container { min-width: unset; padding: 1.3rem 0.6rem;}
+      .logo-spinner-wrapper { width: 96px; height: 96px; }
+      .loader-logo { width: 60px; height: 60px; }
+      .progress-spinner { width: 96px; height: 96px; }
     }
   </style>
 </head>
 <body>
+  <!-- Loader Overlay para transición entre páginas -->
+  <div id="loaderOverlay">
+    <div class="loader-container">
+      <div class="logo-spinner-wrapper">
+        <svg class="progress-spinner" viewBox="0 0 144 144">
+          <circle class="progress-spinner__circle-bg" cx="72" cy="72" r="65" fill="none"/>
+          <circle class="progress-spinner__circle" cx="72" cy="72" r="65" fill="none"/>
+        </svg>
+        <img src="/proyecto/inicio/img/logo-sapnna.png" alt="Logo Institución" class="loader-logo" />
+      </div>
+      <div class="loader-title">Cambiando de módulo...</div>
+      <div class="loader-text">Por favor espera mientras se carga la página</div>
+    </div>
+  </div>
   <div class="sidebar collapsed" id="sidebar" role="navigation" aria-label="Menú principal">
     <div class="logo">
       <img src="/proyecto/inicio/img/logo-sapnna.png" alt="Logo institucional" draggable="false">
     </div>
-    <!-- Perfil de usuario y hora SIEMPRE arriba, fuera del scroll -->
     <div class="profile" style="cursor:pointer" onclick="window.location.href='/proyecto/inicio/perfil_usuario.php'">
       <img src="<?= htmlspecialchars($avatar) ?>" alt="Avatar usuario" referrerpolicy="no-referrer">
       <div class="profile-info">
@@ -231,10 +335,8 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
         <span id="sidebarClock">--:--</span>
       </div>
     </div>
-    <!-- SOLO el menú hace scroll -->
     <div class="sidebar-scroll">
       <ul class="menu" style="padding-bottom:80px">
-        <!-- ... tu menu y submenus ... -->
         <!-- Dashboard -->
         <li>
           <a href="/proyecto/inicio/index.php" class="menu-link" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="right" title="Dashboard">
@@ -286,7 +388,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
             <li><a href="/proyecto/inicio/constancia/generar-constancia.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Constancia de trabajo">Constancia de trabajo</a></li>
           </ul>
         </li>
-        <!-- NUEVO ÍNDICE: REPORTES (solo admin o supervisor) -->
         <?php if ($rol === 'admin' || $rol === 'supervisor'): ?>
         <li>
           <a href="/proyecto/inicio/reportes/reportes.php" class="menu-link" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="right" title="Reportes">
@@ -317,7 +418,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
             <?php endif; ?>
           </ul>
         </li>
-        <!-- Usuarios (solo admin) -->
         <?php if ($rol === 'admin'): ?>
         <li>
           <div class="menu-item" data-link="#" data-submenu="submenu-usuarios" tabindex="0" aria-haspopup="true" aria-expanded="false" aria-controls="submenu-usuarios" data-bs-toggle="tooltip" data-bs-placement="right" title="Usuarios">
@@ -330,7 +430,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
             <li><a href="/proyecto/register-admin.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Registrar">Registrar</a></li>
           </ul>
         </li>
-        <!-- Configuración y Soporte (solo admin) -->
         <li>
           <div class="menu-item" data-link="#" data-submenu="submenu-config" tabindex="0" aria-haspopup="true" aria-expanded="false" aria-controls="submenu-config" data-bs-toggle="tooltip" data-bs-placement="right" title="Configuración y Soporte">
             <i class="fas fa-cogs"></i>
@@ -354,11 +453,11 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
       </a>
     </div>
   </div>
-  <!-- Botón fuera del sidebar minimalista -->
   <button class="toggle-btn-minimal" id="toggle-btn" aria-label="Expandir/cerrar menú lateral">
     <i class="fas fa-chevron-right"></i>
   </button>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('toggle-btn');
@@ -392,13 +491,11 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
       toggleBtn.innerHTML = sidebar.classList.contains('collapsed')
         ? '<i class="fas fa-chevron-right"></i>'
         : '<i class="fas fa-chevron-left"></i>';
-      // Cierra submenús y colapsa tooltips
       if (sidebar.classList.contains('collapsed')) {
         submenus.forEach(submenu => submenu.classList.remove('open'));
         document.querySelectorAll('.submenu-arrow').forEach(arrow => arrow.classList.remove('open'));
         menuItems.forEach(item => item.setAttribute('aria-expanded', 'false'));
       }
-      // Cambia posición del botón
       if (sidebar.classList.contains('collapsed')) {
         toggleBtn.style.left = window.innerWidth > 700 ? '68px' : '58px';
       } else {
@@ -407,7 +504,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
       updateSidebarClock();
     });
 
-    // Menu item click handler
     menuItems.forEach(item => {
       item.addEventListener('click', function (e) {
         const submenuId = item.getAttribute('data-submenu');
@@ -434,7 +530,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
           }
         }
       });
-      // Teclado accesible
       item.addEventListener('keydown', function(e) {
         if (e.key === "Enter" || e.key === " ") {
           item.click();
@@ -442,7 +537,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
       });
     });
 
-    // Overlay para móvil
     function handleMobileSidebar() {
       if (window.innerWidth <= 700) {
         sidebar.classList.add('open-mobile');
@@ -465,7 +559,6 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
     window.addEventListener('resize', handleMobileSidebar);
     handleMobileSidebar();
 
-    // Cierra el menú al dar clic en un enlace en móvil
     document.querySelectorAll('.menu-link, .submenu-item').forEach(link => {
       link.addEventListener('click', () => {
         if (window.innerWidth <= 700) {
@@ -479,18 +572,42 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
       });
     });
 
-    // Sidebar scroll con wheel
     document.querySelector('.sidebar-scroll').addEventListener('wheel', function(e) {
       this.scrollTop += e.deltaY;
       e.preventDefault();
     });
 
-    // Tooltips Bootstrap 5
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
       return new bootstrap.Tooltip(tooltipTriggerEl)
     })
+
+    // Loader para transiciones entre módulos/páginas
+    document.querySelectorAll('.menu-link, .submenu-item').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        if (
+          link.href &&
+          !link.hasAttribute('target') &&
+          !link.href.startsWith('javascript:') &&
+          !link.href.startsWith('#')
+        ) {
+          var loader = document.getElementById('loaderOverlay');
+          loader.style.display = 'flex';
+          var start = Date.now();
+          // El navegador va a navegar, pero si la página carga MUY rápido, el loader se queda
+          window.addEventListener('pageshow', function() {
+            loader.style.display = 'none';
+          });
+          // Si la navegación es AJAX o SPA y quieres ocultarlo manualmente:
+          setTimeout(function() {
+            loader.style.display = 'none';
+          }, 1500);
+        }
+      });
+    });
+    window.addEventListener('pageshow', function() {
+      document.getElementById('loaderOverlay').style.display = 'none';
+    });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
