@@ -1,9 +1,9 @@
-<?php
+﻿<?php
 require __DIR__ . '/conexion/conexion_db.php';
 require_once('fpdf/fpdf.php');
 
-// Ruta del membrete institucional (ajústala si es necesario)
-$membrete_path = __DIR__ . '\\logogob.jpg';
+// Detectar formato solicitado (PDF o Excel/CSV)
+$formato = $_POST['formatoReporte'] ?? 'pdf';
 $tipo = $_POST['tipoReporte'] ?? '';
 
 // --- Construir la consulta y encabezados según el tipo de reporte ---
@@ -22,50 +22,8 @@ switch ($tipo) {
                 LEFT JOIN departamentos d ON dl.id_departamento = d.id_departamento
                 LEFT JOIN cargos c ON dl.id_cargo = c.id_cargo";
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Departamento', 'Cargo'];
-        $widths = [28, 28, 18, 38, 22, 17, 32, 32]; // total 215mm aprox
+        $widths = [35, 35, 25, 50, 30, 20, 35, 35];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'departamento', 'cargo'];
-        break;
-    case 'por_estado_personal':
-        $title = "Reporte por Estado";
-        $estado_id = $_POST['estado_personal'] ?? '';
-        $sql = "SELECT nombres, apellidos, cedula_identidad, correo_electronico, telefono_contacto,
-                    (SELECT nombre FROM estados WHERE id_estado = datos_personales.id_estado) AS estado,
-                    direccion
-                FROM datos_personales
-                WHERE id_estado = ?";
-        $params[] = $estado_id;
-        $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Dirección'];
-        $widths = [28, 28, 18, 38, 22, 22, 50]; // total 206mm
-        $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'direccion'];
-        break;
-    case 'por_municipio_personal':
-        $title = "Reporte por Municipio";
-        $municipio_id = $_POST['municipio_personal'] ?? '';
-        $sql = "SELECT nombres, apellidos, cedula_identidad, correo_electronico, telefono_contacto,
-                    (SELECT nombre FROM estados WHERE id_estado = datos_personales.id_estado) AS estado,
-                    (SELECT nombre FROM municipios WHERE id_municipio = datos_personales.id_municipio) AS municipio,
-                    direccion
-                FROM datos_personales
-                WHERE id_municipio = ?";
-        $params[] = $municipio_id;
-        $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Municipio', 'Dirección'];
-        $widths = [24, 25, 18, 34, 20, 17, 30, 42]; // total 210mm
-        $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'municipio', 'direccion'];
-        break;
-    case 'por_parroquia_personal':
-        $title = "Reporte por Parroquia";
-        $parroquia_id = $_POST['parroquia_personal'] ?? '';
-        $sql = "SELECT nombres, apellidos, cedula_identidad, correo_electronico, telefono_contacto,
-                    (SELECT nombre FROM estados WHERE id_estado = datos_personales.id_estado) AS estado,
-                    (SELECT nombre FROM municipios WHERE id_municipio = datos_personales.id_municipio) AS municipio,
-                    (SELECT nombre FROM parroquias WHERE id_parroquia = datos_personales.id_parroquia) AS parroquia,
-                    direccion
-                FROM datos_personales
-                WHERE id_parroquia = ?";
-        $params[] = $parroquia_id;
-        $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Municipio', 'Parroquia', 'Dirección'];
-        $widths = [21, 21, 17, 31, 18, 15, 23, 23, 41]; // total 210mm
-        $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'municipio', 'parroquia', 'direccion'];
         break;
     case 'por_departamento':
         $title = "Empleados por Departamento";
@@ -78,7 +36,7 @@ switch ($tipo) {
                 WHERE d.id_departamento = ?";
         $params[] = $departamento;
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Departamento', 'Cargo'];
-        $widths = [28, 28, 18, 38, 22, 17, 32, 32];
+        $widths = [35, 35, 25, 50, 30, 20, 35, 35];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'departamento', 'cargo'];
         break;
     case 'por_coordinacion':
@@ -92,7 +50,7 @@ switch ($tipo) {
                 WHERE co.id_coordinacion = ?";
         $params[] = $coordinacion;
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Coordinación', 'Cargo'];
-        $widths = [28, 28, 18, 38, 22, 17, 32, 32];
+        $widths = [35, 35, 25, 50, 30, 20, 40, 35];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'coordinacion', 'cargo'];
         break;
     case 'por_cargo':
@@ -105,7 +63,7 @@ switch ($tipo) {
                 WHERE c.id_cargo = ?";
         $params[] = $cargo;
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Cargo'];
-        $widths = [28, 28, 18, 38, 22, 17, 32];
+        $widths = [35, 35, 25, 50, 30, 20, 35];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'cargo'];
         break;
     case 'por_tipo_personal':
@@ -119,7 +77,7 @@ switch ($tipo) {
                 WHERE tp.id_tipo_personal = ?";
         $params[] = $tipo_personal;
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Tipo Personal', 'Cargo'];
-        $widths = [28, 28, 18, 38, 22, 17, 32, 32];
+        $widths = [35, 35, 25, 50, 30, 20, 40, 35];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'tipo_personal', 'cargo'];
         break;
     case 'por_estado':
@@ -132,7 +90,7 @@ switch ($tipo) {
                 WHERE dl.estado = ?";
         $params[] = $estado;
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Correo', 'Teléfono', 'Estado', 'Cargo'];
-        $widths = [28, 28, 18, 38, 22, 17, 32];
+        $widths = [35, 35, 25, 50, 30, 20, 35];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'cargo'];
         break;
     case 'vacaciones':
@@ -149,7 +107,7 @@ switch ($tipo) {
             $params[] = $fecha_fin;
         }
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Inicio', 'Fin', 'Asignados', 'Usados', 'Estado'];
-        $widths = [27, 27, 17, 29, 29, 17, 17, 28]; // total 191mm
+        $widths = [35, 35, 25, 25, 25, 20, 20, 23];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'fecha_inicio_periodo', 'fecha_fin_periodo', 'dias_asignados', 'dias_usados', 'estado'];
         break;
     case 'reposo':
@@ -166,7 +124,7 @@ switch ($tipo) {
             $params[] = $fecha_fin;
         }
         $headers = ['Nombres', 'Apellidos', 'Cédula', 'Motivo', 'Días', 'Inicio', 'Fin', 'Estado'];
-        $widths = [24, 24, 18, 32, 14, 21, 21, 25]; // total 179mm
+        $widths = [35, 35, 25, 40, 12, 25, 25, 20];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'motivo_reposo', 'dias_otorgados', 'fecha_inicio', 'fecha_fin', 'estado'];
         break;
     case 'carga_familiar':
@@ -176,7 +134,7 @@ switch ($tipo) {
                 INNER JOIN datos_socioeconomicos ds ON dp.id_pers = ds.id_pers
                 INNER JOIN carga_familiar cf ON ds.id_socioeconomico = cf.id_socioeconomico";
         $headers = ['Empleado', 'Apellido', 'Cédula', 'Parentesco', 'Nombre Familiar', 'Apellido Familiar', 'Cédula Familiar', 'Género', 'Discapacidad'];
-        $widths = [22, 22, 17, 17, 22, 22, 17, 15, 15]; // total 169mm
+        $widths = [30, 30, 25, 20, 30, 30, 25, 18, 18];
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'parentesco', 'nombres_familiar', 'apellidos_familiar', 'cedula_familiar', 'genero_familiar', 'tiene_discapacidad'];
         break;
     case 'auditoria':
@@ -194,7 +152,7 @@ switch ($tipo) {
         }
         $sql .= " ORDER BY a.created_at DESC";
         $headers = ['ID', 'Usuario', 'Evento', 'Detalles', 'IP', 'User-Agent', 'Fecha'];
-        $widths = [10, 22, 22, 50, 18, 40, 25]; // total 187mm
+        $widths = [10, 25, 25, 65, 22, 40, 30];
         $campos = ['id', 'usuario', 'event_type', 'details', 'ip_address', 'user_agent', 'created_at'];
         break;
     default:
@@ -206,10 +164,11 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $registros = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// LOG de generación de reporte
 session_start();
 if (isset($_SESSION['usuario']['id'])) {
     $user_id = $_SESSION['usuario']['id'];
-    $event_type = 'generacion_reporte_pdf';
+    $event_type = 'generacion_reporte_' . $formato;
     $details = 'Generación de reporte: ' . ($title ?? $tipo ?? '');
     $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
     $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
@@ -219,7 +178,34 @@ if (isset($_SESSION['usuario']['id'])) {
     $stmt_log->close();
 }
 
-// --- Clase FPDF extendida para encabezado y filas alineadas ---
+// --- GENERAR CSV MEJORADO ---
+if ($formato === 'excel') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="reporte.csv"');
+    // SOLO este BOM en el output, nunca en el archivo PHP
+    echo "\xEF\xBB\xBF";
+    $output = fopen('php://output', 'w');
+    fputcsv($output, $headers, ';'); // Punto y coma para Excel español
+    foreach ($registros as $row) {
+        $fila = [];
+        foreach ($campos as $k) {
+            $valor = $row[$k] ?? '';
+            if (preg_match('/^\d{4}-\d{2}-\d{2}/', $valor)) {
+                $valor = date('d/m/Y', strtotime($valor));
+            }
+            // Si algún valor viene mal, lo puedes forzar:
+            // $valor = mb_convert_encoding($valor, 'UTF-8', 'auto');
+            $fila[] = $valor;
+        }
+        fputcsv($output, $fila, ';');
+    }
+    fclose($output);
+    exit;
+}
+
+// --- GENERAR PDF ---
+$membrete_path = __DIR__ . '\\logogob.jpg';
+
 class PDF_MC_Table extends FPDF
 {
     var $widths;
@@ -333,21 +319,18 @@ class PDF_MC_Table extends FPDF
 }
 
 $pdf = new PDF_MC_Table();
-
-// Márgenes laterales y cálculo de startX
-$margen_izquierdo = 10;
-$margen_derecho = 10;
+$margen_izquierdo = 0;
+$margen_derecho = 505;
 $pageWidth = $pdf->GetPageWidth();
 $totalWidth = array_sum($widths);
 $areaImprimible = $pageWidth - $margen_izquierdo - $margen_derecho;
-if ($totalWidth >= $areaImprimible) $startX = $margen_izquierdo;
-else $startX = $margen_izquierdo + ($areaImprimible - $totalWidth)/2;
+$startX = $margen_izquierdo + ($areaImprimible - $totalWidth) / 2;
 
 $pdf->SetTableFormat($headers, $widths, $startX, $title, $membrete_path);
 $pdf->AddPage('L', 'A4');
 $pdf->SetWidths($widths);
 $pdf->SetAligns(array_fill(0, count($widths), 'L'));
-// Filas de datos
+
 foreach ($registros as $row) {
     $fila = [];
     foreach ($campos as $i => $k) {
