@@ -19,23 +19,27 @@ if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'admin') {
     exit;
 }
 
+// Obtener tipos de personal para el select
+$tipos_personal = $conexion->query("SELECT id_tipo_personal, nombre FROM tipos_personal ORDER BY nombre");
+
 // Procesar el formulario de creación
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre']);
-    $nivel = trim($_POST['nivel']);
-    $sueldo = (float)$_POST['sueldo'];
+    $grado = trim($_POST['grado']);
+    $descripcion = trim($_POST['descripcion']);
+    $id_tipo_personal = (int)$_POST['id_tipo_personal'];
 
     // Validaciones básicas
-    if (empty($nombre) || empty($nivel) || $sueldo <= 0) {
-        $_SESSION['error'] = "Todos los campos son obligatorios y el sueldo debe ser positivo.";
+    if (empty($nombre) || empty($grado) || empty($descripcion) || $id_tipo_personal <= 0) {
+        $_SESSION['error'] = "Todos los campos son obligatorios.";
     } else {
-        $stmt = $conexion->prepare("INSERT INTO cargos (nombre, nivel, sueldo) VALUES (?, ?, ?)");
-        $stmt->bind_param("ssd", $nombre, $nivel, $sueldo);
+        $stmt = $conexion->prepare("INSERT INTO cargos (nombre, grado, descripcion, id_tipo_personal) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("sssi", $nombre, $grado, $descripcion, $id_tipo_personal);
         if ($stmt->execute()) {
             $_SESSION['mensaje'] = "Cargo creado correctamente.";
 
             // ==== LOG DE AGREGADO DE CARGO ====
-            $log_details = "Registro de nuevo cargo: $nombre (Nivel: $nivel, Sueldo: $sueldo)";
+            $log_details = "Registro de nuevo cargo: $nombre (Grado: $grado, Tipo de Personal: $id_tipo_personal, Descripción: $descripcion)";
             registrarLog(
                 $conexion,
                 $current_user_id,
@@ -49,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['error'] = "Error al crear el cargo. " . $conexion->error;
 
             // ==== LOG DE ERROR DE CREACIÓN ====
-            $log_details = "Error al crear cargo: $nombre (Nivel: $nivel, Sueldo: $sueldo). Error: " . $conexion->error;
+            $log_details = "Error al crear cargo: $nombre (Grado: $grado, Tipo de Personal: $id_tipo_personal, Descripción: $descripcion). Error: " . $conexion->error;
             registrarLog(
                 $conexion,
                 $current_user_id,
@@ -76,7 +80,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             --success-color: #28a745;
             --warning-color: #ffc107;
         }
-        
         .form-container {
             background: white;
             border-radius: 15px;
@@ -84,55 +87,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 2rem;
             margin-bottom: 2rem;
         }
-        
         .form-header {
             border-bottom: 2px solid #f0f0f0;
             padding-bottom: 1rem;
             margin-bottom: 2rem;
         }
-        
         .btn-primary {
             background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
             border: none;
             transition: all 0.3s ease;
         }
-        
         .btn-primary:hover {
             background: linear-gradient(to right, var(--primary-color), #258cd1);
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        
         .form-label {
             font-weight: 500;
             color: var(--primary-color);
             margin-bottom: 0.5rem;
         }
-        
         .form-control, .form-select {
             border-radius: 8px;
             padding: 0.75rem 1rem;
             border: 1px solid #dee2e6;
             transition: all 0.3s ease;
         }
-        
         .form-control:focus, .form-select:focus {
             border-color: var(--secondary-color);
             box-shadow: 0 0 0 0.25rem rgba(52, 152, 219, 0.25);
         }
-        
         .input-group-text {
             background-color: #f8f9fa;
             border-radius: 8px 0 0 8px;
             border: 1px solid #dee2e6;
         }
-        
         .card-icon {
             font-size: 3rem;
             color: var(--secondary-color);
             margin-bottom: 1rem;
         }
-        
         .info-card {
             background: linear-gradient(to right, #f8f9fa, #e9ecef);
             border-radius: 15px;
@@ -174,28 +168,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                    placeholder="Ej: Vigilante" required>
                             <div class="form-text">El nombre debe ser descriptivo y claro.</div>
                         </div>
-                        
                         <div class="mb-4">
-                            <label for="nivel" class="form-label">Nivel *</label>
-                            <select class="form-select" id="nivel" name="nivel" required>
-                                <option value="" selected disabled>Seleccione un nivel</option>
-                                <option value="Junior">Junior</option>
-                                <option value="Senior">Senior</option>
-                                <option value="Gerencial">Gerencial</option>
-                                <option value="Directivo">Directivo</option>
+                            <label for="grado" class="form-label">Grado *</label>
+                             <input type="text" class="form-control" id="grado" name="grado" 
+                                   placeholder="Ej: Junior" required>
+                        </div>
+                        <div class="mb-4">
+                            <label for="id_tipo_personal" class="form-label">Tipo de Personal *</label>
+                            <select class="form-select" id="id_tipo_personal" name="id_tipo_personal" required>
+                                <option value="" selected disabled>Seleccione tipo de personal</option>
+                                <?php while($tipo = $tipos_personal->fetch_assoc()): ?>
+                                    <option value="<?= $tipo['id_tipo_personal'] ?>"><?= htmlspecialchars($tipo['nombre']) ?></option>
+                                <?php endwhile; ?>
                             </select>
                         </div>
-                        
                         <div class="mb-4">
-                            <label for="sueldo" class="form-label">Sueldo Base (Bs) *</label>
-                            <div class="input-group">
-                                <span class="input-group-text">Bs</span>
-                                <input type="number" step="0.01" min="0" class="form-control" id="sueldo" 
-                                       name="sueldo" placeholder="Ej: 150.00" required>
-                            </div>
-                            <div class="form-text">Ingrese el sueldo mensual en dólares.</div>
+                            <label for="descripcion" class="form-label">Descripción del Cargo *</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="4" required placeholder="Describa funciones, competencias, etc."></textarea>
                         </div>
-                        
                         <div class="d-grid mt-5">
                             <button type="submit" class="btn btn-primary btn-lg py-3">
                                 <i class="fas fa-save me-2"></i>Crear Nuevo Cargo
@@ -204,7 +194,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </form>
                 </div>
             </div>
-            
             <div class="col-lg-4">
                 <div class="info-card">
                     <div class="card-icon text-center">
@@ -218,11 +207,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </li>
                         <li class="list-group-item d-flex align-items-center">
                             <i class="fas fa-check-circle text-success me-2"></i>
-                            <span>Asigne el nivel correcto según responsabilidades</span>
+                            <span>Asigne el grado correcto según responsabilidades</span>
                         </li>
                         <li class="list-group-item d-flex align-items-center">
                             <i class="fas fa-check-circle text-success me-2"></i>
-                            <span>Considere el mercado laboral para el sueldo</span>
+                            <span>Considere el tipo de personal adecuado</span>
                         </li>
                         <li class="list-group-item d-flex align-items-center">
                             <i class="fas fa-check-circle text-success me-2"></i>
@@ -230,7 +219,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </li>
                     </ul>
                 </div>
-                
                 <div class="info-card" style="border-left-color: var(--success-color);">
                     <div class="card-icon text-center">
                         <i class="fas fa-chart-line"></i>
@@ -242,30 +230,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Sueldos:</strong> Mantenga rangos coherentes por nivel
+                        <strong>Grados:</strong> Mantenga rangos coherentes por grado
                     </div>
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Descripciones:</strong> Desarrolle descripciones de cargo posteriormente
+                        <strong>Descripciones:</strong> Desarrolle descripciones claras y completas
                     </div>
                 </div>
             </div>
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Validación adicional antes de enviar
-        document.querySelector('form').addEventListener('submit', function(e) {
-            const sueldo = parseFloat(document.getElementById('sueldo').value);
-            
-            if (sueldo < 100) {
-                alert('El sueldo base debe ser al menos $100');
-                e.preventDefault();
-                return false;
-            }
-            
-            return true;
-        });
-    </script>
 </body>
 </html>

@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_empleado'])) {
     if ($busqueda !== '') {
         $sql = "
             SELECT p.id_pers, p.nombres, p.apellidos, p.cedula_identidad,
-                   dl.id_laboral, dl.fecha_ingreso, c.nombre AS cargo_nombre, c.sueldo
+                   dl.id_laboral, dl.fecha_ingreso, c.nombre AS cargo_nombre
             FROM datos_personales p
             INNER JOIN (
                 SELECT id_pers, MAX(id_laboral) as max_id_laboral
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['seleccionar_empleado'
     $id_pers = intval($_POST['id_pers']);
     $stmt = $conn->prepare("
         SELECT p.id_pers, p.nombres, p.apellidos, p.cedula_identidad,
-               dl.id_laboral, dl.fecha_ingreso, c.nombre AS cargo_nombre, c.sueldo
+               dl.id_laboral, dl.fecha_ingreso, c.nombre AS cargo_nombre
         FROM datos_personales p
         INNER JOIN datos_laborales dl ON p.id_pers = dl.id_pers
         LEFT JOIN cargos c ON dl.id_cargo = c.id_cargo
@@ -87,7 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_cedula'])) {
                     dl.id_laboral,
                     dl.fecha_ingreso, 
                     c.nombre AS cargo_nombre,
-                    c.sueldo
                 FROM datos_personales p
                 INNER JOIN datos_laborales dl ON p.id_pers = dl.id_pers
                 LEFT JOIN cargos c ON dl.id_cargo = c.id_cargo

@@ -21,6 +21,9 @@ if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'admin') {
 
 $id_cargo = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+// Obtener tipos de personal para el select
+$tipos_personal = $conexion->query("SELECT id_tipo_personal, nombre FROM tipos_personal ORDER BY nombre");
+
 // Obtener el cargo actual
 $stmt = $conexion->prepare("SELECT * FROM cargos WHERE id_cargo = ?");
 $stmt->bind_param("i", $id_cargo);
@@ -37,20 +40,21 @@ if (!$cargo) {
 // Procesar actualización
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre']);
-    $nivel = trim($_POST['nivel']);
-    $sueldo = (float)$_POST['sueldo'];
+    $grado = trim($_POST['grado']);
+    $descripcion = trim($_POST['descripcion']);
+    $id_tipo_personal = (int)$_POST['id_tipo_personal'];
 
     // Validaciones básicas
-    if (empty($nombre) || empty($nivel) || $sueldo <= 0) {
-        $_SESSION['error'] = "Todos los campos son obligatorios y el sueldo debe ser positivo.";
+    if (empty($nombre) || empty($grado) || empty($descripcion) || $id_tipo_personal <= 0) {
+        $_SESSION['error'] = "Todos los campos son obligatorios.";
     } else {
-        $stmt = $conexion->prepare("UPDATE cargos SET nombre = ?, nivel = ?, sueldo = ? WHERE id_cargo = ?");
-        $stmt->bind_param("ssdi", $nombre, $nivel, $sueldo, $id_cargo);
+        $stmt = $conexion->prepare("UPDATE cargos SET nombre = ?, grado = ?, descripcion = ?, id_tipo_personal = ? WHERE id_cargo = ?");
+        $stmt->bind_param("sssii", $nombre, $grado, $descripcion, $id_tipo_personal, $id_cargo);
         if ($stmt->execute()) {
             $_SESSION['mensaje'] = "Cargo actualizado correctamente.";
 
             // ==== LOG DE EDICIÓN DE CARGO ====
-            $log_details = "Edición de cargo ID $id_cargo: $nombre (Nivel: $nivel, Sueldo: $sueldo)";
+            $log_details = "Edición de cargo ID $id_cargo: $nombre (Grado: $grado, Tipo de Personal: $id_tipo_personal, Descripción: $descripcion)";
             registrarLog(
                 $conexion,
                 $current_user_id,
@@ -64,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['error'] = "Error al actualizar el cargo.";
 
             // ==== LOG DE ERROR EN EDICIÓN ====
-            $log_details = "Error al editar cargo ID $id_cargo: $nombre (Nivel: $nivel, Sueldo: $sueldo). Error: " . $conexion->error;
+            $log_details = "Error al editar cargo ID $id_cargo: $nombre (Grado: $grado, Tipo de Personal: $id_tipo_personal, Descripción: $descripcion). Error: " . $conexion->error;
             registrarLog(
                 $conexion,
                 $current_user_id,
@@ -89,7 +93,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             --primary-color: #2c3e50;
             --secondary-color: #3498db;
         }
-        
         .form-container {
             background: white;
             border-radius: 15px;
@@ -97,23 +100,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 2rem;
             margin-bottom: 2rem;
         }
-        
         .form-header {
             border-bottom: 2px solid #f0f0f0;
             padding-bottom: 1rem;
             margin-bottom: 2rem;
         }
-        
         .btn-primary {
             background-color: var(--secondary-color);
             border-color: var(--secondary-color);
         }
-        
         .btn-primary:hover {
             background-color: #258cd1;
             border-color: #258cd1;
         }
-        
         .form-label {
             font-weight: 500;
             color: var(--primary-color);
@@ -144,23 +143,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" class="form-control" id="nombre" name="nombre" 
                            value="<?= htmlspecialchars($cargo['nombre']) ?>" required>
                 </div>
-                
                 <div class="mb-3">
-                    <label for="nivel" class="form-label">Nivel</label>
-                    <select class="form-select" id="nivel" name="nivel" required>
-                        <option value="Junior" <?= $cargo['nivel'] === 'Junior' ? 'selected' : '' ?>>Junior</option>
-                        <option value="Senior" <?= $cargo['nivel'] === 'Senior' ? 'selected' : '' ?>>Senior</option>
-                        <option value="Gerencial" <?= $cargo['nivel'] === 'Gerencial' ? 'selected' : '' ?>>Gerencial</option>
-                        <option value="Directivo" <?= $cargo['nivel'] === 'Directivo' ? 'selected' : '' ?>>Directivo</option>
+                    <label for="grado" class="form-label">Grado</label>
+                    <input type="text" class="form-control" id="grado" name="grado" 
+                           value="<?= htmlspecialchars($cargo['grado']) ?>" required>
+                </div>
+                <div class="mb-3">
+                    <label for="id_tipo_personal" class="form-label">Tipo de Personal</label>
+                    <select class="form-select" id="id_tipo_personal" name="id_tipo_personal" required>
+                        <option value="" disabled <?= !$cargo['id_tipo_personal'] ? 'selected' : '' ?>>Seleccione tipo de personal</option>
+                        <?php
+                        $tipos_personal->data_seek(0);
+                        while($tipo = $tipos_personal->fetch_assoc()): ?>
+                            <option value="<?= $tipo['id_tipo_personal'] ?>" <?= $cargo['id_tipo_personal'] == $tipo['id_tipo_personal'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($tipo['nombre']) ?>
+                            </option>
+                        <?php endwhile; ?>
                     </select>
                 </div>
-                
                 <div class="mb-4">
-                    <label for="sueldo" class="form-label">Sueldo (Bs)</label>
-                    <input type="number" step="0.01" min="0" class="form-control" id="sueldo" name="sueldo" 
-                           value="<?= htmlspecialchars($cargo['sueldo']) ?>" required>
+                    <label for="descripcion" class="form-label">Descripción</label>
+                    <textarea class="form-control" id="descripcion" name="descripcion" rows="4" required><?= htmlspecialchars($cargo['descripcion']) ?></textarea>
                 </div>
-                
                 <div class="d-grid">
                     <button type="submit" class="btn btn-primary btn-lg">
                         <i class="fas fa-save me-2"></i>Guardar Cambios

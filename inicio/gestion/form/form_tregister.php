@@ -68,13 +68,33 @@ if ($id_pers <= 0) {
     exit();
 }
 
-// Obtener tipos de personal, departamentos, cargos, tipos de contrato, coordinaciones y primas
+// Obtener tipos de personal, coordinaciones, departamentos, cargos, tipos de contrato y primas
 $tipos_personal = $conn->query("SELECT id_tipo_personal, nombre FROM tipos_personal ORDER BY nombre");
-$departamentos = $conn->query("SELECT id_departamento, nombre FROM departamentos ORDER BY nombre");
-$cargos = $conn->query("SELECT id_cargo, nombre FROM cargos ORDER BY nombre");
+$coordinaciones_query = $conn->query("SELECT id_coordinacion, nombre FROM coordinaciones ORDER BY nombre");
+$departamentos_query = $conn->query("SELECT id_departamento, nombre, id_coordinacion FROM departamentos ORDER BY nombre");
+$cargos_query = $conn->query("SELECT id_cargo, nombre, id_tipo_personal FROM cargos ORDER BY nombre");
 $tipos_contrato = $conn->query("SELECT id_contrato, nombre FROM tipos_contrato ORDER BY nombre");
-$coordinaciones = $conn->query("SELECT id_coordinacion, nombre FROM coordinaciones ORDER BY nombre");
 $primas = $conn->query("SELECT id_prima, nombre, monto FROM primas ORDER BY nombre");
+
+// Para JS: obtener todos los departamentos y coordinaciones
+$departamentos_all = [];
+$departamentos_query->data_seek(0);
+while($depto = $departamentos_query->fetch_assoc()) {
+    $departamentos_all[] = $depto;
+}
+
+$coordinaciones_all = [];
+$coordinaciones_query->data_seek(0);
+while($coord = $coordinaciones_query->fetch_assoc()) {
+    $coordinaciones_all[] = $coord;
+}
+
+// CARGOS para JS
+$cargos_all = [];
+$cargos_query->data_seek(0);
+while($cargo = $cargos_query->fetch_assoc()) {
+    $cargos_all[] = $cargo;
+}
 
 // Función de validación
 function existeRegistro($conn, $tabla, $campo, $valor) {
@@ -89,11 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha_ingreso = $_POST['fecha_ingreso'];
     $id_tipo_personal = $_POST['id_tipo_personal'];
     $estado = $_POST['estado'];
+    $id_coordinacion = $_POST['id_coordinacion'];
     $id_departamento = $_POST['id_departamento'];
     $id_cargo = $_POST['id_cargo'];
     $id_contrato = $_POST['id_contrato'];
     $ficha = trim($_POST['ficha']);
-    $id_coordinacion = $_POST['id_coordinacion'];
 
     $ha_trabajado_anteriormente = $_POST['ha_trabajado_anteriormente'] ?? 'No';
     $nombre_empresa_anterior = ($ha_trabajado_anteriormente === 'Sí') ? trim($_POST['nombre_empresa_anterior'] ?? '') : NULL;
@@ -139,14 +159,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 id_departamento, id_cargo, id_contrato,
                 ficha, id_coordinacion,
                 ha_trabajado_anteriormente, nombre_empresa_anterior,
-                ano_ingreso_anterior, ano_culminacion_anterior, -- Nombres de columnas actualizados
+                ano_ingreso_anterior, ano_culminacion_anterior,
                 correo_institucional, descripcion_funciones
             ) VALUES (
                 :id_pers, :fecha_ingreso, :id_tipo_personal, :estado,
                 :id_departamento, :id_cargo, :id_contrato,
                 :ficha, :id_coordinacion,
                 :ha_trabajado_anteriormente, :nombre_empresa_anterior,
-                :ano_ingreso_anterior, :ano_culminacion_anterior, -- Nombres de parámetros actualizados
+                :ano_ingreso_anterior, :ano_culminacion_anterior,
                 :correo_institucional, :descripcion_funciones
             )");
 
@@ -162,16 +182,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id_coordinacion' => $id_coordinacion,
                 ':ha_trabajado_anteriormente' => $ha_trabajado_anteriormente,
                 ':nombre_empresa_anterior' => $nombre_empresa_anterior,
-                ':ano_ingreso_anterior' => $ano_ingreso_anterior, // Variable PHP correcta
-                ':ano_culminacion_anterior' => $ano_culminacion_anterior, // Variable PHP correcta
+                ':ano_ingreso_anterior' => $ano_ingreso_anterior,
+                ':ano_culminacion_anterior' => $ano_culminacion_anterior,
                 ':correo_institucional' => $correo_institucional,
                 ':descripcion_funciones' => $descripcion_funciones
             ]);
 
-            // Obtener ID del nuevo registro
             $id_laboral = $pdo->lastInsertId();
 
-            // Registrar creación exitosa
             registrarLog($conn, $current_user_id, 'laboral_created',
                         "Datos laborales creados para ID Persona: $id_pers - ID Laboral: $id_laboral");
 
@@ -191,7 +209,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'tipo' => 'danger'
             ];
 
-            // Registrar error de base de datos
             registrarLog($conn, $current_user_id, 'laboral_insert_error',
                         "Error al registrar datos para ID Persona: $id_pers - $error_msg");
         } catch (Exception $e) {
@@ -202,7 +219,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'tipo' => 'danger'
             ];
 
-            // Registrar excepción general
             registrarLog($conn, $current_user_id, 'laboral_exception',
                         "Excepción para ID Persona: $id_pers - $error_msg");
         }
@@ -246,6 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #f9f9f9;
         }
     </style>
+    <script>
+    var cargosData = <?php echo json_encode($cargos_all); ?>;
+    var departamentosData = <?php echo json_encode($departamentos_all); ?>;
+    var coordinacionesData = <?php echo json_encode($coordinaciones_all); ?>;
+    </script>
 </head>
 <body>
     <div class="container">
@@ -318,32 +339,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </select>
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label for="id_departamento" class="form-label">Departamento*:</label>
-                        <select class="form-select" id="id_departamento" name="id_departamento" required>
+                        <label for="id_coordinacion" class="form-label">Coordinación*:</label>
+                        <select class="form-select" id="id_coordinacion" name="id_coordinacion" required onchange="filtrarDepartamentosPorCoordinacion()">
                             <option value="">Seleccione...</option>
-                            <?php $departamentos->data_seek(0); ?>
-                            <?php while($depto = $departamentos->fetch_assoc()): ?>
-                                <option value="<?= $depto['id_departamento'] ?>" <?= (isset($_POST['id_departamento']) && $_POST['id_departamento'] == $depto['id_departamento']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($depto['nombre']) ?>
+                            <?php foreach ($coordinaciones_all as $coord): ?>
+                                <option value="<?= $coord['id_coordinacion'] ?>" <?= (isset($_POST['id_coordinacion']) && $_POST['id_coordinacion'] == $coord['id_coordinacion']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($coord['nombre']) ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
+                        <label for="id_departamento" class="form-label">Departamento*:</label>
+                        <select class="form-select" id="id_departamento" name="id_departamento" required>
+                            <option value="">Seleccione coordinación primero...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
                         <label for="id_cargo" class="form-label">Cargo*:</label>
                         <select class="form-select" id="id_cargo" name="id_cargo" required>
                             <option value="">Seleccione...</option>
-                            <?php $cargos->data_seek(0); ?>
-                            <?php while($cargo = $cargos->fetch_assoc()): ?>
-                                <option value="<?= $cargo['id_cargo'] ?>" <?= (isset($_POST['id_cargo']) && $_POST['id_cargo'] == $cargo['id_cargo']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($cargo['nombre']) ?>
-                                </option>
-                            <?php endwhile; ?>
+                            <!-- Opciones se llenan dinámicamente -->
                         </select>
                     </div>
+                </div>
+
+                <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="id_contrato" class="form-label">Tipo de Contrato*:</label>
                         <select class="form-select" id="id_contrato" name="id_contrato" required>
@@ -356,28 +380,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php endwhile; ?>
                         </select>
                     </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="id_coordinacion" class="form-label">Coordinación*:</label>
-                        <select class="form-select" id="id_coordinacion" name="id_coordinacion" required>
-                            <option value="">Seleccione...</option>
-                            <?php $coordinaciones->data_seek(0); ?>
-                            <?php while($coord = $coordinaciones->fetch_assoc()): ?>
-                                <option value="<?= $coord['id_coordinacion'] ?>" <?= (isset($_POST['id_coordinacion']) && $_POST['id_coordinacion'] == $coord['id_coordinacion']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($coord['nombre']) ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
-                    </div>
                     <div class="col-md-6 mb-3">
                         <label for="ficha" class="form-label">Número de Ficha*:</label>
                         <input type="text" class="form-control" id="ficha" name="ficha"
                                value="<?= htmlspecialchars($_POST['ficha'] ?? '') ?>"
                                pattern="[A-Z0-9-]+"
-                               title="Solo mayúsculas, números y guiones"
-                               required>
+                               title="Solo mayúsculas, números y guiones">
                     </div>
                 </div>
 
@@ -502,13 +510,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // -------------------- CARGOS DINÁMICOS -------------------------
+        function cargarCargosPorTipo(tipoPersonalId) {
+            var cargosSelect = document.getElementById('id_cargo');
+            var selectedCargo = '<?= isset($_POST['id_cargo']) ? htmlspecialchars($_POST['id_cargo']) : '' ?>';
+            cargosSelect.innerHTML = '<option value="">Seleccione...</option>';
+            cargosData.forEach(function(cargo) {
+                if (cargo.id_tipo_personal == tipoPersonalId) {
+                    var selected = (cargo.id_cargo == selectedCargo) ? 'selected' : '';
+                    cargosSelect.innerHTML += '<option value="' + cargo.id_cargo + '" ' + selected + '>' + cargo.nombre + '</option>';
+                }
+            });
+        }
+
+        function filtrarDepartamentosPorCoordinacion() {
+            var id_coordinacion = document.getElementById('id_coordinacion').value;
+            var deptoSelect = document.getElementById('id_departamento');
+            var selectedDepto = '<?= isset($_POST['id_departamento']) ? htmlspecialchars($_POST['id_departamento']) : '' ?>';
+            deptoSelect.innerHTML = '<option value="">Seleccione...</option>';
+
+            departamentosData.forEach(function(dep) {
+                if (dep.id_coordinacion == id_coordinacion) {
+                    var selected = (dep.id_departamento == selectedDepto) ? 'selected' : '';
+                    deptoSelect.innerHTML += '<option value="' + dep.id_departamento + '" ' + selected + '>' + dep.nombre + '</option>';
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
+            // Experiencia previa
             const trabajoAnteriorSi = document.getElementById('trabajo_anterior_si');
-            if (trabajoAnteriorSi.checked) {
+            if (trabajoAnteriorSi && trabajoAnteriorSi.checked) {
                 toggleExperienciaPrevia(true);
             } else {
                 toggleExperienciaPrevia(false);
             }
+
+            // Cargos dinámicos
+            var tipoPersonalSelect = document.getElementById('id_tipo_personal');
+            tipoPersonalSelect.addEventListener('change', function() {
+                cargarCargosPorTipo(this.value);
+            });
+            var tipoPersonalId = tipoPersonalSelect.value;
+            if (tipoPersonalId) cargarCargosPorTipo(tipoPersonalId);
+
+            // Departamentos dinámicos por coordinación
+            var coordinacionSelect = document.getElementById('id_coordinacion');
+            coordinacionSelect.addEventListener('change', filtrarDepartamentosPorCoordinacion);
+            var id_coordinacion = coordinacionSelect.value;
+            if (id_coordinacion) filtrarDepartamentosPorCoordinacion();
         });
     </script>
 </body>

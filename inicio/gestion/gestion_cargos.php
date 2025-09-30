@@ -14,9 +14,9 @@ function registrarLog($conn, $user_id, $event_type, $details) {
 $current_user_id = $_SESSION['usuario']['id'] ?? null;
 
 // Verificar permisos de admin
- if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'admin') {
-     header('Location: login.php');
-     exit;
+if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'admin') {
+    header('Location: login.php');
+    exit;
 }
 
 $stmt_empleados = $conexion->prepare("
@@ -121,12 +121,13 @@ $condicion = '';
 $parametros = [];
 
 if ($busqueda !== '') {
-    $condicion = " WHERE nombre LIKE ? OR nivel LIKE ? ";
-    $parametros = ["%$busqueda%", "%$busqueda%"];
+    // Buscar también por tipo de personal y descripción
+    $condicion = " WHERE c.nombre LIKE ? OR c.nivel LIKE ? OR c.descripcion LIKE ? OR tp.nombre LIKE ? ";
+    $parametros = ["%$busqueda%", "%$busqueda%", "%$busqueda%", "%$busqueda%"];
 }
 
 // Obtener total de registros
-$sql_total = "SELECT COUNT(*) AS total FROM cargos $condicion";
+$sql_total = "SELECT COUNT(*) AS total FROM cargos c LEFT JOIN tipos_personal tp ON c.id_tipo_personal = tp.id_tipo_personal $condicion";
 $stmt_total = $conexion->prepare($sql_total);
 
 if (!empty($parametros)) {
@@ -138,7 +139,10 @@ $total_registros = $stmt_total->get_result()->fetch_assoc()['total'];
 $total_paginas = ceil($total_registros / $registros_por_pagina);
 
 // Obtener registros paginados
-$sql = "SELECT * FROM cargos $condicion ORDER BY id_cargo DESC LIMIT ? OFFSET ?";
+$sql = "SELECT c.*, tp.nombre AS tipo_personal_nombre FROM cargos c
+        LEFT JOIN tipos_personal tp ON c.id_tipo_personal = tp.id_tipo_personal
+        $condicion
+        ORDER BY c.id_cargo DESC LIMIT ? OFFSET ?";
 $stmt = $conexion->prepare($sql);
 
 if (!empty($parametros)) {
@@ -454,7 +458,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             <form method="GET" class="row g-3">
                 <div class="col-md-8">
                     <input type="text" name="busqueda" class="form-control form-control-lg" 
-                           placeholder="Buscar cargos por nombre o nivel..." 
+                           placeholder="Buscar cargos por nombre, grado, tipo de personal o descripción..." 
                            value="<?= htmlspecialchars($busqueda) ?>">
                 </div>
                 <div class="col-md-2">
@@ -476,8 +480,9 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                     <tr>
                         <th>ID</th>
                         <th>Nombre del Cargo</th>
-                        <th>Nivel</th>
-                        <th>Sueldo</th>
+                        <th>Grado</th>
+                        <th>Tipo de Personal</th>
+                        <th>Descripción</th>
                         <th>Empleados Asociados</th>
                         <th>Acciones</th>
                     </tr>
@@ -486,9 +491,8 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                     <?php if(count($cargos) > 0): ?>
                         <?php foreach($cargos as $cargo): ?>
                             <?php 
-                            // Clase para el badge según el nivel
                             $badge_class = '';
-                            switch($cargo['nivel']) {
+                            switch($cargo['grado']) {
                                 case 'Junior': $badge_class = 'badge-junior'; break;
                                 case 'Senior': $badge_class = 'badge-senior'; break;
                                 case 'Gerencial': $badge_class = 'badge-gerencial'; break;
@@ -503,11 +507,14 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                                 </td>
                                 <td>
                                     <span class="badge badge-custom <?= $badge_class ?>">
-                                        <?= $cargo['nivel'] ?>
+                                        <?= htmlspecialchars($cargo['grado']) ?>
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="fw-bold"><?= number_format($cargo['sueldo'], 2, ',', '.') ?> Bs</span>
+                                    <span class="fw-bold"><?= htmlspecialchars($cargo['tipo_personal_nombre'] ?? '') ?></span>
+                                </td>
+                                <td>
+                                    <span><?= htmlspecialchars($cargo['descripcion']) ?></span>
                                 </td>
                                 <td>
                                     <span class="badge bg-primary rounded-pill py-2 px-3">
@@ -541,7 +548,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="6" class="text-center py-4">
+                            <td colspan="7" class="text-center py-4">
                                 <i class="fas fa-info-circle fa-2x mb-3 text-secondary"></i>
                                 <h5>No se encontraron cargos</h5>
                                 <p class="text-muted">Intenta con otros términos de búsqueda o crea un nuevo cargo.</p>
