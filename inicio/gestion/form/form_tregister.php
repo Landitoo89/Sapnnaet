@@ -74,7 +74,7 @@ $coordinaciones_query = $conn->query("SELECT id_coordinacion, nombre FROM coordi
 $departamentos_query = $conn->query("SELECT id_departamento, nombre, id_coordinacion FROM departamentos ORDER BY nombre");
 $cargos_query = $conn->query("SELECT id_cargo, nombre, id_tipo_personal FROM cargos ORDER BY nombre");
 $tipos_contrato = $conn->query("SELECT id_contrato, nombre FROM tipos_contrato ORDER BY nombre");
-$primas = $conn->query("SELECT id_prima, nombre, monto FROM primas ORDER BY nombre");
+//$primas = $conn->query("SELECT id_prima, nombre, monto FROM primas ORDER BY nombre"); // Ya no se usa
 
 // Para JS: obtener todos los departamentos y coordinaciones
 $departamentos_all = [];
@@ -114,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id_cargo = $_POST['id_cargo'];
     $id_contrato = $_POST['id_contrato'];
     $ficha = trim($_POST['ficha']);
+    $sueldo = $_POST['sueldo'] ?? null;
 
     $ha_trabajado_anteriormente = $_POST['ha_trabajado_anteriormente'] ?? 'No';
     $nombre_empresa_anterior = ($ha_trabajado_anteriormente === 'Sí') ? trim($_POST['nombre_empresa_anterior'] ?? '') : NULL;
@@ -127,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errores = [];
     if (empty($fecha_ingreso) || empty($id_tipo_personal) || empty($estado) || empty($id_departamento) ||
         empty($id_cargo) || empty($id_contrato) || empty($ficha) || empty($id_coordinacion) ||
-        empty($correo_institucional) || empty($descripcion_funciones)) {
+        empty($correo_institucional) || empty($descripcion_funciones) || empty($sueldo)) {
         $errores[] = 'Todos los campos marcados son obligatorios.';
     } elseif (!filter_var($correo_institucional, FILTER_VALIDATE_EMAIL)) {
         $errores[] = 'El correo institucional no es válido.';
@@ -137,6 +138,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errores[] = 'La fecha de ingreso anterior no puede ser posterior a la fecha de culminación anterior.';
     } elseif (existeRegistro($conn, 'datos_laborales', 'ficha', $ficha)) {
         $errores[] = 'La ficha laboral ya existe. Por favor, introduzca una ficha única.';
+    }
+    // Validar primas
+    if (!empty($_POST['primas'])) {
+        foreach ($_POST['primas'] as $prima) {
+            if (empty($prima['nombre']) || empty($prima['monto']) || floatval($prima['monto']) <= 0) {
+                $errores[] = 'Cada prima debe tener nombre y monto mayor a 0.';
+                break;
+            }
+        }
     }
 
     if (!empty($errores)) {
@@ -157,14 +167,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt_insert = $pdo->prepare("INSERT INTO datos_laborales (
                 id_pers, fecha_ingreso, id_tipo_personal, estado,
                 id_departamento, id_cargo, id_contrato,
-                ficha, id_coordinacion,
+                ficha, sueldo, id_coordinacion,
                 ha_trabajado_anteriormente, nombre_empresa_anterior,
                 ano_ingreso_anterior, ano_culminacion_anterior,
                 correo_institucional, descripcion_funciones
             ) VALUES (
                 :id_pers, :fecha_ingreso, :id_tipo_personal, :estado,
                 :id_departamento, :id_cargo, :id_contrato,
-                :ficha, :id_coordinacion,
+                :ficha, :sueldo, :id_coordinacion,
                 :ha_trabajado_anteriormente, :nombre_empresa_anterior,
                 :ano_ingreso_anterior, :ano_culminacion_anterior,
                 :correo_institucional, :descripcion_funciones
@@ -179,6 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id_cargo' => $id_cargo,
                 ':id_contrato' => $id_contrato,
                 ':ficha' => $ficha,
+                ':sueldo' => $sueldo,
                 ':id_coordinacion' => $id_coordinacion,
                 ':ha_trabajado_anteriormente' => $ha_trabajado_anteriormente,
                 ':nombre_empresa_anterior' => $nombre_empresa_anterior,
@@ -189,6 +200,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $id_laboral = $pdo->lastInsertId();
+
+            // Guardar primas personalizadas
+            if (!empty($_POST['primas'])) {
+                $stmt_prima = $pdo->prepare("INSERT INTO empleado_primas_personalizadas (id_laboral, nombre_prima, monto) VALUES (?, ?, ?)");
+                foreach ($_POST['primas'] as $prima) {
+                    $nombre = trim($prima['nombre']);
+                    $monto = floatval($prima['monto']);
+                    if ($nombre && $monto > 0) {
+                        $stmt_prima->execute([$id_laboral, $nombre, $monto]);
+                    }
+                }
+            }
 
             registrarLog($conn, $current_user_id, 'laboral_created',
                         "Datos laborales creados para ID Persona: $id_pers - ID Laboral: $id_laboral");
@@ -380,12 +403,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php endwhile; ?>
                         </select>
                     </div>
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label for="ficha" class="form-label">Número de Ficha*:</label>
                         <input type="text" class="form-control" id="ficha" name="ficha"
                                value="<?= htmlspecialchars($_POST['ficha'] ?? '') ?>"
                                pattern="[A-Z0-9-]+"
-                               title="Solo mayúsculas, números y guiones">
+                               title="Solo mayúsculas, números y guiones" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="sueldo" class="form-label">Sueldo*:</label>
+                        <input type="number" step="0.01" min="0" class="form-control" id="sueldo" name="sueldo"
+                               value="<?= htmlspecialchars($_POST['sueldo'] ?? '') ?>" required>
                     </div>
                 </div>
 
@@ -403,30 +431,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-section-header mt-5">
                     <h2><i class="bi bi-journal-check me-2"></i>Primas Asignadas</h2>
                 </div>
-                <div class="mb-3 p-3 border rounded bg-light">
-                    <?php
-                    $primas->data_seek(0);
-                    if ($primas->num_rows > 0): ?>
-                        <div class="row">
-                            <?php while($prima = $primas->fetch_assoc()): ?>
-                                <div class="col-md-6 col-lg-4 mb-2">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox"
-                                               name="primas[]"
-                                               value="<?= $prima['id_prima'] ?>"
-                                               id="prima_<?= $prima['id_prima'] ?>"
-                                               <?= (isset($_POST['primas']) && in_array($prima['id_prima'], $_POST['primas'])) ? 'checked' : '' ?>>
-                                        <label class="form-check-label" for="prima_<?= $prima['id_prima'] ?>">
-                                            <?= htmlspecialchars($prima['nombre']) ?>
-                                            (<?= number_format($prima['monto'], 2, ',', '.') ?> Bs)
-                                        </label>
+                <div class="mb-3 p-3 border rounded bg-light" id="primas-container">
+                    <div id="prima-list">
+                        <?php
+                        if (!empty($_POST['primas'])) {
+                            foreach ($_POST['primas'] as $i => $prima) {
+                                $nombre = $prima['nombre'] ?? '';
+                                $monto = $prima['monto'] ?? '';
+                                ?>
+                                <div class="row mb-2 prima-item">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control" name="primas[<?= $i ?>][nombre]" placeholder="Nombre de la prima" value="<?= htmlspecialchars($nombre) ?>" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <input type="number" step="0.01" min="0" class="form-control" name="primas[<?= $i ?>][monto]" placeholder="Monto" value="<?= htmlspecialchars($monto) ?>" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-danger" onclick="eliminarPrima(this)">Eliminar</button>
                                     </div>
                                 </div>
-                            <?php endwhile; ?>
-                        </div>
-                    <?php else: ?>
-                        <p class="text-muted">No hay primas disponibles para asignar.</p>
-                    <?php endif; ?>
+                                <?php
+                            }
+                        } else {
+                            // Render empty default row
+                            ?>
+                            <div class="row mb-2 prima-item">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" name="primas[0][nombre]" placeholder="Nombre de la prima" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="number" step="0.01" min="0" class="form-control" name="primas[0][monto]" placeholder="Monto" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="button" class="btn btn-danger" onclick="eliminarPrima(this)">Eliminar</button>
+                                </div>
+                            </div>
+                            <?php
+                        }
+                        ?>
+                    </div>
+                    <button type="button" class="btn btn-success mt-3" onclick="agregarPrima()">Agregar otra prima</button>
                 </div>
 
                 <div class="form-section-header mt-5">
@@ -560,6 +604,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             var id_coordinacion = coordinacionSelect.value;
             if (id_coordinacion) filtrarDepartamentosPorCoordinacion();
         });
+
+        // PRIMAS PERSONALIZADAS
+        function agregarPrima() {
+            var primaList = document.getElementById('prima-list');
+            var index = primaList.getElementsByClassName('prima-item').length;
+            var div = document.createElement('div');
+            div.className = 'row mb-2 prima-item';
+            div.innerHTML = `
+                <div class="col-md-6">
+                    <input type="text" class="form-control" name="primas[${index}][nombre]" placeholder="Nombre de la prima" required>
+                </div>
+                <div class="col-md-4">
+                    <input type="number" step="0.01" min="0" class="form-control" name="primas[${index}][monto]" placeholder="Monto" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-danger" onclick="eliminarPrima(this)">Eliminar</button>
+                </div>
+            `;
+            primaList.appendChild(div);
+        }
+        function eliminarPrima(btn) {
+            btn.closest('.prima-item').remove();
+        }
     </script>
 </body>
 </html>

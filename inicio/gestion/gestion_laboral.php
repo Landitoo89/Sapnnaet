@@ -371,7 +371,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
             color: #ff94e8;
             border-color: #ff94e8;
         }
-    </style>
+   </style>
 </head>
 <body>
 <!-- BOTÓN MODO OSCURO/MODO CLARO -->
@@ -522,12 +522,24 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                             <th>Cargo</th>
                             <th>Contrato</th>
                             <th>Tipo Personal</th>
+                            <th>Sueldo (Bs)</th>
+                            <th>Primas</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach($registros as $registro): ?>
+                        <?php
+                        // Prepara conexión PDO para primas personalizadas
+                        $pdo = new PDO("mysql:host=$servidor;dbname=$basedatos", $usuario, $contraseña);
+                        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+                        foreach($registros as $registro):
+                            // --- Consultar primas personalizadas ---
+                            $primas_stmt = $pdo->prepare("SELECT nombre_prima, monto FROM empleado_primas_personalizadas WHERE id_laboral = ?");
+                            $primas_stmt->execute([$registro['id_laboral']]);
+                            $primas = $primas_stmt->fetchAll(PDO::FETCH_ASSOC);
+                        ?>
                         <tr data-bs-toggle="collapse" href="#detalle-<?= htmlspecialchars($registro['id_laboral']) ?>" role="button">
                             <td><?= htmlspecialchars($registro['id_laboral']) ?></td>
                             <td>
@@ -539,6 +551,18 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                             <td><?= htmlspecialchars($registro['nombre_cargo'] ?? 'N/A') ?></td>
                             <td><?= htmlspecialchars($registro['tipo_contrato'] ?? 'N/A') ?></td>
                             <td><?= htmlspecialchars($registro['nombre_tipo_personal'] ?? 'N/A') ?></td>
+                            <td>
+                                <?= is_numeric($registro['sueldo']) ? number_format($registro['sueldo'], 2, ',', '.') . " Bs" : 'N/A' ?>
+                            </td>
+                            <td>
+                                <?php if (!empty($primas)): ?>
+                                    <?php foreach ($primas as $prima): ?>
+                                        <span class="badge bg-info mb-1"><?= htmlspecialchars($prima['nombre_prima']) ?>: <?= number_format($prima['monto'], 2, ',', '.') ?> Bs</span><br>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">Sin primas asignadas</span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php 
                                     $claseEstado = '';
@@ -575,7 +599,7 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                             </td>
                         </tr>
                         <tr class="detail-row">
-                            <td colspan="9" class="detail-cell">
+                            <td colspan="11" class="detail-cell">
                                 <div class="collapse collapsible-content" id="detalle-<?= htmlspecialchars($registro['id_laboral']) ?>">
                                     <div class="row">
                                         <div class="col-md-6">
@@ -605,6 +629,20 @@ require $_SERVER['DOCUMENT_ROOT']."/proyecto/inicio/sidebar.php";
                                                 </p>
                                             <?php else: ?>
                                                 <p>No ha trabajado en otra empresa anteriormente.</p>
+                                            <?php endif; ?>
+                                            <h6 class="mt-3"><i class="fas fa-money-check-alt me-2"></i>Sueldo</h6>
+                                            <p>
+                                                <?= is_numeric($registro['sueldo']) ? number_format($registro['sueldo'], 2, ',', '.') . " Bs" : 'N/A' ?>
+                                            </p>
+                                            <h6 class="mt-3"><i class="fas fa-gift me-2"></i>Primas Asignadas</h6>
+                                            <?php if (!empty($primas)): ?>
+                                                <ul>
+                                                    <?php foreach ($primas as $prima): ?>
+                                                        <li><?= htmlspecialchars($prima['nombre_prima']) ?>: <?= number_format($prima['monto'], 2, ',', '.') ?> Bs</li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            <?php else: ?>
+                                                <p>Sin primas asignadas</p>
                                             <?php endif; ?>
                                         </div>
                                     </div>

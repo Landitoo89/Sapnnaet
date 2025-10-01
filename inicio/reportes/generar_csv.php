@@ -1,35 +1,42 @@
-<?php
+﻿<?php
 require __DIR__ . '/conexion/conexion_db.php';
 
-// Opción especial: Exportar toda la base de datos
+// --- Exportar toda la base de datos ---
 if ($_POST['tipoReporte'] === 'toda_bd_csv') {
+    if (ob_get_level()) ob_end_clean(); // Limpia buffer de salida
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="toda_bd.csv"');
     $output = fopen('php://output', 'w');
-    fwrite($output, "\xEF\xBB\xBF"); // BOM UTF-8
+    // BOM UTF-8 para Excel
+    fwrite($output, "\xEF\xBB\xBF");
 
     // Obtén todas las tablas
     $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
 
     foreach ($tables as $table) {
-        // Escribe el nombre de la tabla como título (celda grande)
-        fputcsv($output, ["------ Tabla: $table ------"]);
-        // Escribe los encabezados de la tabla
+        // Nombre de la tabla como título
+        fputcsv($output, ["------ Tabla: $table ------"], ';');
+        // Encabezados
         $columns = $pdo->query("SHOW COLUMNS FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
         $headers = array_map(function($col){ return $col['Field']; }, $columns);
-        fputcsv($output, $headers);
+        fputcsv($output, $headers, ';');
 
-        // Escribe los datos
+        // Datos
         $rows = $pdo->query("SELECT * FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $row) {
             $fila = [];
             foreach ($headers as $col) {
-                $fila[] = $row[$col];
+                $valor = $row[$col];
+                $valor = mb_convert_encoding($valor, 'UTF-8', 'auto');
+                if (preg_match('/^\d{4}-\d{2}-\d{2}/', $valor)) {
+                    $valor = date('d/m/Y', strtotime($valor));
+                }
+                $fila[] = $valor;
             }
-            fputcsv($output, $fila);
+            fputcsv($output, $fila, ';');
         }
         // Línea vacía entre tablas
-        fputcsv($output, ['']);
+        fputcsv($output, [''], ';');
     }
     fclose($output);
     exit;
@@ -38,13 +45,12 @@ if ($_POST['tipoReporte'] === 'toda_bd_csv') {
 // --------- Reportes CSV normales ----------
 $tipo = $_POST['tipoReporte'] ?? '';
 
-// Construcción de consulta y encabezados (igual que antes)
+// Construcción de consulta y encabezados
 $sql = "";
 $params = [];
 $headers = [];
 $campos = [];
 switch ($tipo) {
-
     case 'general':
         $sql = "SELECT dp.nombres, dp.apellidos, dp.cedula_identidad, dp.correo_electronico, dp.telefono_contacto, dl.estado, d.nombre AS departamento, c.nombre AS cargo
                 FROM datos_personales dp
@@ -94,7 +100,6 @@ switch ($tipo) {
         $campos = ['nombres', 'apellidos', 'cedula_identidad', 'correo_electronico', 'telefono_contacto', 'estado', 'municipio', 'parroquia', 'direccion'];
         break;
 
-    // ... el resto igual que antes ...
     case 'por_departamento':
         $departamento = $_POST['departamento'] ?? '';
         $sql = "SELECT dp.nombres, dp.apellidos, dp.cedula_identidad, dp.correo_electronico, dp.telefono_contacto, dl.estado, d.nombre AS departamento, c.nombre AS cargo
@@ -225,24 +230,27 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $registros = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// --- CSV EXPORTACIÓN ---
+// --- CSV EXPORTACIÓN MEJORADO ---
+if (ob_get_level()) ob_end_clean(); // Limpia buffer de salida
 header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="reporte.csv"');
 $output = fopen('php://output', 'w');
 fwrite($output, "\xEF\xBB\xBF"); // BOM UTF-8
 
-fputcsv($output, $headers);
+fputcsv($output, $headers, ';'); // punto y coma para Excel español
 
 foreach ($registros as $row) {
     $fila = [];
     foreach ($campos as $k) {
         $col = $row[$k] ?? '';
+        $col = mb_convert_encoding($col, 'UTF-8', 'auto');
         if (preg_match('/^\d{4}-\d{2}-\d{2}/', $col)) {
             $col = date('d/m/Y', strtotime($col));
         }
         $fila[] = $col;
     }
-    fputcsv($output, $fila);
+    fputcsv($output, $fila, ';');
 }
 fclose($output);
 exit;
+?>

@@ -356,6 +356,7 @@ $avatar = $_SESSION['usuario']['avatar'] ?? '/proyecto/inicio/img/avatar-default
             <li><a href="/proyecto/inicio/gestion/gestion_socioeconomicos.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Socioeconómicos">Socioeconómicos</a></li>
             <li><a href="/proyecto/inicio/gestion/gestion_carga.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Carga familiar">Carga familiar</a></li>
             <li><a href="/proyecto/inicio/gestion/gestion_laboral.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Datos laborales">Datos laborales</a></li>
+            <li><a href="/proyecto/inicio/carga/carga_masiva_rrhh.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Carga Masiva de Empleados">Carga Masiva de Empleados</a></li>
             <?php if ($rol === 'admin'): ?>
               <li><a href="/proyecto/inicio/gestion/gestion_contrato.php" class="submenu-item" data-bs-toggle="tooltip" data-bs-placement="right" title="Confg RRHH">Confg RRHH</a></li>
             <?php endif; ?>

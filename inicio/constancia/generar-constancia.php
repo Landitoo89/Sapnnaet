@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_empleado'])) {
     if ($busqueda !== '') {
         $sql = "
             SELECT p.id_pers, p.nombres, p.apellidos, p.cedula_identidad,
-                   dl.id_laboral, dl.fecha_ingreso, c.nombre AS cargo_nombre
+                   dl.id_laboral, dl.fecha_ingreso, dl.sueldo, c.nombre AS cargo_nombre
             FROM datos_personales p
             INNER JOIN (
                 SELECT id_pers, MAX(id_laboral) as max_id_laboral
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['seleccionar_empleado'
     $id_pers = intval($_POST['id_pers']);
     $stmt = $conn->prepare("
         SELECT p.id_pers, p.nombres, p.apellidos, p.cedula_identidad,
-               dl.id_laboral, dl.fecha_ingreso, c.nombre AS cargo_nombre
+               dl.id_laboral, dl.fecha_ingreso, dl.sueldo, c.nombre AS cargo_nombre
         FROM datos_personales p
         INNER JOIN datos_laborales dl ON p.id_pers = dl.id_pers
         LEFT JOIN cargos c ON dl.id_cargo = c.id_cargo
@@ -58,11 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['seleccionar_empleado'
     $datos_empleado = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($datos_empleado) {
+        // Ahora consultamos primas personalizadas
         $stmt_primas = $conn->prepare("
-            SELECT pr.nombre, pr.monto 
-            FROM empleado_primas ep
-            INNER JOIN primas pr ON ep.id_prima = pr.id_prima
-            WHERE ep.id_laboral = ?
+            SELECT nombre_prima, monto
+            FROM empleado_primas_personalizadas
+            WHERE id_laboral = ?
         ");
         $stmt_primas->execute([$datos_empleado['id_laboral']]);
         $primas_empleado = $stmt_primas->fetchAll(PDO::FETCH_ASSOC);
@@ -86,11 +86,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_cedula'])) {
                     p.cedula_identidad,
                     dl.id_laboral,
                     dl.fecha_ingreso, 
-                    c.nombre AS cargo_nombre,
+                    dl.sueldo,
+                    c.nombre AS cargo_nombre
                 FROM datos_personales p
                 INNER JOIN datos_laborales dl ON p.id_pers = dl.id_pers
                 LEFT JOIN cargos c ON dl.id_cargo = c.id_cargo
                 WHERE p.cedula_identidad = ?
+                ORDER BY dl.fecha_ingreso DESC
+                LIMIT 1
             ");
             $stmt->execute([$cedula]);
             $datos_empleado = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -98,11 +101,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar_cedula'])) {
             if (!$datos_empleado) {
                 $errores[] = "No se encontró empleado con esta cédula.";
             } else {
+                // Primas personalizadas
                 $stmt_primas = $conn->prepare("
-                    SELECT pr.nombre, pr.monto 
-                    FROM empleado_primas ep
-                    INNER JOIN primas pr ON ep.id_prima = pr.id_prima
-                    WHERE ep.id_laboral = ?
+                    SELECT nombre_prima, monto
+                    FROM empleado_primas_personalizadas
+                    WHERE id_laboral = ?
                 ");
                 $stmt_primas->execute([$datos_empleado['id_laboral']]);
                 $primas_empleado = $stmt_primas->fetchAll(PDO::FETCH_ASSOC);
@@ -209,6 +212,7 @@ if (isset($_SESSION['mensaje_constancia'])) {
                                 <th>Nombre</th>
                                 <th>Apellido</th>
                                 <th>Cargo</th>
+                                <th>Sueldo</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -226,6 +230,7 @@ if (isset($_SESSION['mensaje_constancia'])) {
                                 <td><?= htmlspecialchars($emp['nombres']) ?></td>
                                 <td><?= htmlspecialchars($emp['apellidos']) ?></td>
                                 <td><?= htmlspecialchars($emp['cargo_nombre']) ?></td>
+                                <td><?= is_numeric($emp['sueldo']) ? number_format($emp['sueldo'], 2, ',', '.') . ' Bs.' : 'N/A' ?></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -264,7 +269,7 @@ if (isset($_SESSION['mensaje_constancia'])) {
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Sueldo Mensual</label>
                             <input type="text" class="form-control"
-                                   value="<?= htmlspecialchars(number_format($datos_empleado['sueldo'], 2, ',', '.') . ' Bs.') ?>"
+                                   value="<?= is_numeric($datos_empleado['sueldo']) ? htmlspecialchars(number_format($datos_empleado['sueldo'], 2, ',', '.') . ' Bs.') : 'N/A' ?>"
                                    readonly>
                         </div>
                         <div class="col-md-6">
@@ -273,7 +278,7 @@ if (isset($_SESSION['mensaje_constancia'])) {
                                 <ul class="list-group mt-2">
                                     <?php foreach ($primas_empleado as $prima): ?>
                                         <li class="list-group-item">
-                                            <?= htmlspecialchars(number_format($prima['monto'], 2, ',', '.') . ' Bs. de PRIMA DE ' . $prima['nombre']) ?>
+                                            <?= htmlspecialchars(number_format($prima['monto'], 2, ',', '.') . ' Bs. de PRIMA DE ' . $prima['nombre_prima']) ?>
                                         </li>
                                     <?php endforeach; ?>
                                 </ul>
