@@ -208,105 +208,125 @@ try {
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if(count($vacaciones) > 0): ?>
-                        <?php foreach($vacaciones as $vacacion): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($vacacion['nombres'] . ' ' . $vacacion['apellidos']) ?></td>
-                            <td><?= htmlspecialchars($vacacion['departamento'] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($vacacion['cargo'] ?? 'N/A') ?></td>
-                            <td>
-                                <?php
-                                // Rango total de vacaciones (inicio hasta fin de fragmento reanudado si existe, si no hasta fin1)
-                                $fecha_fin_total = $vacacion['fecha_fin2'] ?: $vacacion['fecha_fin1'];
-                                echo "<b>Del:</b> " . date('d/m/Y', strtotime($vacacion['fecha_inicio1'])) . " al " . date('d/m/Y', strtotime($fecha_fin_total));
-                                // Si hay reposo, muestra botón de info
-                                if ($vacacion['fecha_reposo_inicio']) {
-                                    echo '<button class="info-btn" data-bs-toggle="modal" data-bs-target="#reposoModal'.$vacacion['id_vacaciones'].'" title="Ver detalle de interrupción"><i class="bi bi-info-circle"></i></button>';
-                                }
-                                ?>
-                            </td>
-                            <td>
-                                <?php
-                                if ($vacacion['fecha_reposo_inicio']) {
-                                    echo "<span class='status-badge badge-unificada'>
-                                            Vacaciones (Interrumpidas por Reposo)
-                                          </span>";
-                                } elseif ($vacacion['estado1'] == 'interrumpida') {
-                                    echo "<span class='status-badge badge-interrumpida'>Interrumpida</span>";
-                                } elseif ($vacacion['estado1'] == 'vacaciones') {
-                                    echo "<span class='status-badge badge-vacaciones'>Vacaciones</span>";
-                                } elseif ($vacacion['estado1'] == 'pendiente_reposo') {
-                                    echo "<span class='status-badge badge-pendiente_reposo'>Por Reanudar</span>";
-                                } else {
-                                    echo "<span class='status-badge badge-simple'>".ucfirst($vacacion['estado1'])."</span>";
-                                }
-                                ?>
-                            </td>
-                            <td>
-                                <div class="d-flex gap-2">
-                                    <form method="GET" action="generar-reporte-vacacion.php" target="_blank">
-                                        <input type="hidden" name="id_vacacion" value="<?= $vacacion['id_vacaciones'] ?>">
-                                        <button type="submit" class="btn btn-sm btn-info" title="Generar PDF">
-                                            <i class="bi bi-file-earmark-pdf"></i>
-                                        </button>
-                                    </form>
-                                    <a href="#" class="btn btn-danger btn-sm action-btn delete-btn" 
-                                       data-bs-toggle="modal" 
-                                       data-bs-target="#confirmModal"
-                                       data-url="eliminar-vacacion.php?id=<?= $vacacion['id_vacaciones'] ?>&pagina=<?= $pagina_actual ?>">
-                                        <i class="bi bi-trash3-fill"></i>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php if ($vacacion['fecha_reposo_inicio']): ?>
-                        <!-- Modal de observaciones/reposo -->
-                        <div class="modal fade" id="reposoModal<?= $vacacion['id_vacaciones'] ?>" tabindex="-1" aria-labelledby="reposoModalLabel<?= $vacacion['id_vacaciones'] ?>" aria-hidden="true">
-                          <div class="modal-dialog">
-                            <div class="modal-content">
-                              <div class="modal-header bg-info">
-                                <h5 class="modal-title" id="reposoModalLabel<?= $vacacion['id_vacaciones'] ?>">
-                                    <i class="bi bi-activity"></i> Detalle de Interrupción por Reposo
-                                </h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                              </div>
-                              <div class="modal-body">
-                                <p><b>Período de Reposo:</b><br>
-                                   <?= date('d/m/Y', strtotime($vacacion['fecha_reposo_inicio'])) ?> al <?= date('d/m/Y', strtotime($vacacion['fecha_reposo_fin'])) ?>
-                                </p>
-                                <p>
-                                  <b>Motivo:</b><br>
-                                  <?= htmlspecialchars($vacacion['motivo_reposo']) ?>
-                                </p>
-                                <?php if (!empty($vacacion['observaciones'])): ?>
-                                <hr>
-                                <p><b>Observaciones:</b><br>
-                                  <?= htmlspecialchars($vacacion['observaciones']) ?>
-                                </p>
-                                <?php endif; ?>
-                                <?php if ($vacacion['fecha_inicio2'] && $vacacion['fecha_fin2']): ?>
-                                <hr>
-                                <p>
-                                  <b>Vacaciones reanudadas:</b><br>
-                                  <?= date('d/m/Y', strtotime($vacacion['fecha_inicio2'])) ?> al <?= date('d/m/Y', strtotime($vacacion['fecha_fin2'])) ?>
-                                </p>
-                                <?php endif; ?>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <?php endif; ?>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="6" class="text-center py-4">
-                                <i class="bi bi-calendar-x-fill display-4 text-muted mb-3"></i>
-                                <h4 class="text-muted">No hay registros de vacaciones</h4>
-                            </td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+    <?php if(count($vacaciones) > 0): ?>
+        <?php foreach($vacaciones as $vacacion): ?>
+        <tr>
+            <td><?= htmlspecialchars($vacacion['nombres'] . ' ' . $vacacion['apellidos']) ?></td>
+            <td><?= htmlspecialchars($vacacion['departamento'] ?? 'N/A') ?></td>
+            <td><?= htmlspecialchars($vacacion['cargo'] ?? 'N/A') ?></td>
+            <td>
+                <?php
+                // Rango total de vacaciones (inicio hasta fin de fragmento reanudado si existe, si no hasta fin1)
+                $fecha_fin_total = $vacacion['fecha_fin2'] ?: $vacacion['fecha_fin1'];
+                echo "<b>Del:</b> " . date('d/m/Y', strtotime($vacacion['fecha_inicio1'])) . " al " . date('d/m/Y', strtotime($fecha_fin_total));
+                // Si hay reposo, muestra botón de info
+                if ($vacacion['fecha_reposo_inicio']) {
+                    echo '<button class="info-btn" data-bs-toggle="modal" data-bs-target="#reposoModal'.$vacacion['id_vacaciones'].'" title="Ver detalle de interrupción"><i class="bi bi-info-circle"></i></button>';
+                }
+                ?>
+            </td>
+            <td>
+                <?php
+                // INICIO DEL CAMBIO DE VISUALIZACIÓN DE ESTADO
+                $hoy = date('Y-m-d');
+                $fecha_fin_total = $vacacion['fecha_fin2'] ?: $vacacion['fecha_fin1'];
+
+                // Si la vacación fue interrumpida por reposo
+                if ($vacacion['fecha_reposo_inicio']) {
+                    // Si el reposo ya culminó
+                    if ($vacacion['fecha_reposo_fin'] < $hoy) {
+                        echo "<span class='status-badge badge-reposo'>Reposo Culminado</span>";
+                    } else {
+                        echo "<span class='status-badge badge-unificada'>
+                                Vacaciones (Interrumpidas por Reposo)
+                              </span>";
+                    }
+                }
+                // Si la vacación ya culminó y NO fue interrumpida
+                elseif ($fecha_fin_total < $hoy) {
+                    echo "<span class='status-badge badge-activo'>Vacaciones Culminadas</span>";
+                }
+                // Estados restantes
+                elseif ($vacacion['estado1'] == 'interrumpida') {
+                    echo "<span class='status-badge badge-interrumpida'>Interrumpida</span>";
+                }
+                elseif ($vacacion['estado1'] == 'vacaciones') {
+                    echo "<span class='status-badge badge-vacaciones'>Vacaciones</span>";
+                }
+                elseif ($vacacion['estado1'] == 'pendiente_reposo') {
+                    echo "<span class='status-badge badge-pendiente_reposo'>Por Reanudar</span>";
+                }
+                else {
+                    echo "<span class='status-badge badge-simple'>".ucfirst($vacacion['estado1'])."</span>";
+                }
+                // FIN DEL CAMBIO DE VISUALIZACIÓN DE ESTADO
+                ?>
+            </td>
+            <td>
+                <div class="d-flex gap-2">
+                    <form method="GET" action="generar-reporte-vacacion.php" target="_blank">
+                        <input type="hidden" name="id_vacacion" value="<?= $vacacion['id_vacaciones'] ?>">
+                        <button type="submit" class="btn btn-sm btn-info" title="Generar PDF">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                        </button>
+                    </form>
+                    <a href="#" class="btn btn-danger btn-sm action-btn delete-btn" 
+                       data-bs-toggle="modal" 
+                       data-bs-target="#confirmModal"
+                       data-url="eliminar-vacacion.php?id=<?= $vacacion['id_vacaciones'] ?>&pagina=<?= $pagina_actual ?>">
+                        <i class="bi bi-trash3-fill"></i>
+                    </a>
+                </div>
+            </td>
+        </tr>
+        <?php if ($vacacion['fecha_reposo_inicio']): ?>
+        <!-- Modal de observaciones/reposo -->
+        <div class="modal fade" id="reposoModal<?= $vacacion['id_vacaciones'] ?>" tabindex="-1" aria-labelledby="reposoModalLabel<?= $vacacion['id_vacaciones'] ?>" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header bg-info">
+                <h5 class="modal-title" id="reposoModalLabel<?= $vacacion['id_vacaciones'] ?>">
+                    <i class="bi bi-activity"></i> Detalle de Interrupción por Reposo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <p><b>Período de Reposo:</b><br>
+                   <?= date('d/m/Y', strtotime($vacacion['fecha_reposo_inicio'])) ?> al <?= date('d/m/Y', strtotime($vacacion['fecha_reposo_fin'])) ?>
+                </p>
+                <p>
+                  <b>Motivo:</b><br>
+                  <?= htmlspecialchars($vacacion['motivo_reposo']) ?>
+                </p>
+                <?php if (!empty($vacacion['observaciones'])): ?>
+                <hr>
+                <p><b>Observaciones:</b><br>
+                  <?= htmlspecialchars($vacacion['observaciones']) ?>
+                </p>
+                <?php endif; ?>
+                <?php if ($vacacion['fecha_inicio2'] && $vacacion['fecha_fin2']): ?>
+                <hr>
+                <p>
+                  <b>Vacaciones reanudadas:</b><br>
+                  <?= date('d/m/Y', strtotime($vacacion['fecha_inicio2'])) ?> al <?= date('d/m/Y', strtotime($vacacion['fecha_fin2'])) ?>
+                </p>
+                <?php endif; ?>
+              </div>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
+        <?php endforeach; ?>
+    <?php else: ?>
+        <tr>
+            <td colspan="6" class="text-center py-4">
+                <i class="bi bi-calendar-x-fill display-4 text-muted mb-3"></i>
+                <h4 class="text-muted">No hay registros de vacaciones</h4>
+            </td>
+        </tr>
+    <?php endif; ?>
+    </tbody>
+</table>
         </div>
 
         <?php if($total_paginas > 1): ?>
