@@ -2,7 +2,6 @@
 require_once __DIR__ . '/../conexion/conexion_db.php';
 session_start();
 
-// Habilitar la visualización de errores (para depuración, deshabilitar en producción)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -22,9 +21,8 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 }
 
 $id_laboral = intval($_GET['id']);
-$current_user_id = $_SESSION['usuario']['id']; // ID del usuario actual
+$current_user_id = $_SESSION['usuario']['id'];
 
-// Obtener el registro laboral existente
 try {
     $pdo = new PDO("mysql:host=$servidor;dbname=$basedatos", $usuario, $contraseña);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -43,26 +41,21 @@ try {
         exit;
     }
 
-    // Obtener datos del trabajador asociado
     $stmt_pers = $pdo->prepare("SELECT nombres, apellidos, cedula_identidad FROM datos_personales WHERE id_pers = ?");
     $stmt_pers->execute([$registro['id_pers']]);
     $trabajador = $stmt_pers->fetch(PDO::FETCH_ASSOC);
 
-    // Obtener las primas asignadas
-    $stmt_primas_asignadas = $pdo->prepare("SELECT id_prima FROM empleado_primas WHERE id_laboral = ?");
-    $stmt_primas_asignadas->execute([$id_laboral]);
-    $primas_asignadas = [];
-    while ($row = $stmt_primas_asignadas->fetch(PDO::FETCH_ASSOC)) {
-        $primas_asignadas[] = $row['id_prima'];
-    }
+    // SOLO obtener primas personalizadas (empleado_primas_personalizadas)
+    $stmt_primas_manual = $pdo->prepare("SELECT id, nombre_prima, monto FROM empleado_primas_personalizadas WHERE id_laboral = ?");
+    $stmt_primas_manual->execute([$id_laboral]);
+    $primas_manual = $stmt_primas_manual->fetchAll(PDO::FETCH_ASSOC);
 
-    // Obtener listas para los selectores
+    // Listas para selectores
     $tipos_personal = $pdo->query("SELECT id_tipo_personal, nombre FROM tipos_personal ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
     $departamentos = $pdo->query("SELECT id_departamento, nombre FROM departamentos ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
     $cargos = $pdo->query("SELECT id_cargo, nombre FROM cargos ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
     $tipos_contrato = $pdo->query("SELECT id_contrato, nombre FROM tipos_contrato ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
     $coordinaciones_all = $pdo->query("SELECT id_coordinacion, nombre, id_departamento FROM coordinaciones ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
-    $primas = $pdo->query("SELECT id_prima, nombre, monto FROM primas ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
     $_SESSION['mensaje'] = [
@@ -74,7 +67,7 @@ try {
     exit;
 }
 
-// Procesar actualización al enviar el formulario
+// Procesar actualización
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
     $fecha_ingreso = $_POST['fecha_ingreso'];
     $id_tipo_personal = $_POST['id_tipo_personal'];
@@ -84,6 +77,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
     $id_contrato = $_POST['id_contrato'];
     $ficha = trim($_POST['ficha']);
     $id_coordinacion = $_POST['id_coordinacion'];
+    $sueldo = isset($_POST['sueldo']) ? floatval($_POST['sueldo']) : null;
 
     $ha_trabajado_anteriormente = $_POST['ha_trabajado_anteriormente'] ?? 'No';
     $nombre_empresa_anterior = ($ha_trabajado_anteriormente === 'Sí') ? trim($_POST['nombre_empresa_anterior'] ?? '') : NULL;
@@ -92,21 +86,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
 
     $correo_institucional = filter_var($_POST['correo_institucional'] ?? '', FILTER_SANITIZE_EMAIL);
     $descripcion_funciones = trim($_POST['descripcion_funciones'] ?? '');
-    $primas_seleccionadas = isset($_POST['primas']) ? $_POST['primas'] : [];
+    $primas_manual_input = $_POST['primas_manual'] ?? [];
 
-    // Validaciones
     $errores = [];
-    if (empty($fecha_ingreso) || empty($id_tipo_personal) || empty($estado) || empty($id_departamento) || empty($id_cargo) || empty($id_contrato) || empty($ficha) || empty($id_coordinacion) || empty($correo_institucional) || empty($descripcion_funciones)) {
-        $errores[] = 'Todos los campos con (*) son obligatorios.';
+    if (empty($fecha_ingreso) || empty($id_tipo_personal) || empty($estado) || empty($id_departamento) || empty($id_cargo) ||
+        empty($id_contrato) || empty($ficha) || empty($id_coordinacion) || empty($correo_institucional) || empty($descripcion_funciones) ||
+        $sueldo === null || $sueldo <= 0) {
+        $errores[] = 'Todos los campos obligatorios y el sueldo deben estar completos y ser válidos.';
     } elseif (!filter_var($correo_institucional, FILTER_VALIDATE_EMAIL)) {
         $errores[] = 'El correo institucional no es válido.';
     } elseif ($ha_trabajado_anteriormente === 'Sí' && (empty($nombre_empresa_anterior) || empty($fecha_ingreso_anterior) || empty($fecha_culminacion_anterior))) {
-        $errores[] = 'Si ha trabajado anteriormente, debe completar todos los campos de experiencia previa (Nombre, Fecha de Ingreso y Fecha de Culminación).';
+        $errores[] = 'Complete todos los campos de experiencia laboral previa.';
     } elseif ($ha_trabajado_anteriormente === 'Sí' && ($fecha_ingreso_anterior > $fecha_culminacion_anterior)) {
         $errores[] = 'La fecha de ingreso anterior no puede ser posterior a la fecha de culminación anterior.';
     }
 
-    // Validación de ficha única (excluyendo el registro actual)
     try {
         $stmt_ficha = $pdo->prepare("SELECT id_laboral FROM datos_laborales WHERE ficha = ? AND id_laboral != ?");
         $stmt_ficha->execute([$ficha, $id_laboral]);
@@ -117,28 +111,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
         $errores[] = 'Error al verificar la ficha: ' . $e->getMessage();
     }
 
+    if (!empty($primas_manual_input)) {
+        foreach ($primas_manual_input as $prima) {
+            if (empty($prima['nombre']) || !isset($prima['monto']) || floatval($prima['monto']) <= 0) {
+                $errores[] = 'Todas las primas manuales deben tener nombre y monto mayor a cero.';
+                break;
+            }
+        }
+    }
+
     if (empty($errores)) {
         $pdo->beginTransaction();
         try {
-            // Guardar valores anteriores para el log
-            $valores_anteriores = [
-                'fecha_ingreso' => $registro['fecha_ingreso'],
-                'id_tipo_personal' => $registro['id_tipo_personal'],
-                'estado' => $registro['estado'],
-                'id_departamento' => $registro['id_departamento'],
-                'id_cargo' => $registro['id_cargo'],
-                'id_contrato' => $registro['id_contrato'],
-                'ficha' => $registro['ficha'],
-                'id_coordinacion' => $registro['id_coordinacion'],
-                'correo_institucional' => $registro['correo_institucional'],
-                'descripcion_funciones' => $registro['descripcion_funciones'],
-                'ha_trabajado_anteriormente' => $registro['ha_trabajado_anteriormente'],
-                'nombre_empresa_anterior' => $registro['nombre_empresa_anterior'],
-                'ano_ingreso_anterior' => $registro['ano_ingreso_anterior'],
-                'ano_culminacion_anterior' => $registro['ano_culminacion_anterior'],
-                'primas' => implode(',', $primas_asignadas)
-            ];
-
+            // Actualizar registro laboral, incluyendo sueldo
             $stmt_update = $pdo->prepare("UPDATE datos_laborales SET
                 fecha_ingreso = :fecha_ingreso,
                 id_tipo_personal = :id_tipo_personal,
@@ -154,6 +139,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                 ano_culminacion_anterior = :ano_culminacion_anterior,
                 correo_institucional = :correo_institucional,
                 descripcion_funciones = :descripcion_funciones,
+                sueldo = :sueldo,
                 fecha_actualizacion = NOW()
                 WHERE id_laboral = :id_laboral");
 
@@ -172,60 +158,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                 ':ano_culminacion_anterior' => $fecha_culminacion_anterior,
                 ':correo_institucional' => $correo_institucional,
                 ':descripcion_funciones' => $descripcion_funciones,
+                ':sueldo' => $sueldo,
                 ':id_laboral' => $id_laboral
             ]);
-
-            // Actualizar primas asignadas
-            $stmt_delete_primas = $pdo->prepare("DELETE FROM empleado_primas WHERE id_laboral = ?");
-            $stmt_delete_primas->execute([$id_laboral]);
-
-            $nuevas_primas = [];
-            if (!empty($primas_seleccionadas)) {
-                $stmt_insert_prima = $pdo->prepare("INSERT INTO empleado_primas (id_laboral, id_prima) VALUES (?, ?)");
-                foreach ($primas_seleccionadas as $id_prima) {
-                    $stmt_insert_prima->execute([$id_laboral, intval($id_prima)]);
-                    $nuevas_primas[] = $id_prima;
-                }
-            }
-
-            // Obtener valores nuevos para el log
-            $valores_nuevos = [
-                'fecha_ingreso' => $fecha_ingreso,
-                'id_tipo_personal' => $id_tipo_personal,
-                'estado' => $estado,
-                'id_departamento' => $id_departamento,
-                'id_cargo' => $id_cargo,
-                'id_contrato' => $id_contrato,
-                'ficha' => $ficha,
-                'id_coordinacion' => $id_coordinacion,
-                'correo_institucional' => $correo_institucional,
-                'descripcion_funciones' => $descripcion_funciones,
-                'ha_trabajado_anteriormente' => $ha_trabajado_anteriormente,
-                'nombre_empresa_anterior' => $nombre_empresa_anterior,
-                'ano_ingreso_anterior' => $fecha_ingreso_anterior,
-                'ano_culminacion_anterior' => $fecha_culminacion_anterior,
-                'primas' => implode(',', $nuevas_primas)
-            ];
-
-            // Registrar acción en el log
-            $detalles_cambios = [];
-            foreach ($valores_anteriores as $campo => $valor_anterior) {
-                $valor_nuevo = $valores_nuevos[$campo] ?? null;
-                
-                if ($valor_anterior != $valor_nuevo) {
-                    $detalles_cambios[] = "$campo: '$valor_anterior' → '$valor_nuevo'";
+            // SOLO actualizar primas personalizadas
+            $pdo->prepare("DELETE FROM empleado_primas_personalizadas WHERE id_laboral = ?")->execute([$id_laboral]);
+            if (!empty($primas_manual_input)) {
+                $stmt_insert_manual = $pdo->prepare("INSERT INTO empleado_primas_personalizadas (id_laboral, nombre_prima, monto) VALUES (?, ?, ?)");
+                foreach ($primas_manual_input as $prima) {
+                    $stmt_insert_manual->execute([
+                        $id_laboral,
+                        trim($prima['nombre']),
+                        floatval($prima['monto'])
+                    ]);
                 }
             }
 
             $detalles_log = "Usuario ID: $current_user_id editó registro laboral ID: $id_laboral\n";
             $detalles_log .= "Trabajador: " . $trabajador['nombres'] . ' ' . $trabajador['apellidos'] . "\n";
-            $detalles_log .= "Cambios:\n" . implode("\n", $detalles_cambios);
-            
+            $detalles_log .= "Cambios realizados.";
+
             $ip_address = $_SERVER['REMOTE_ADDR'];
             $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
-
             $stmt_log = $pdo->prepare("INSERT INTO action_logs (user_id, event_type, details, ip_address, user_agent) 
-                                       VALUES (:user_id, :event_type, :details, :ip_address, :user_agent)");
+                VALUES (:user_id, :event_type, :details, :ip_address, :user_agent)");
             $stmt_log->execute([
                 ':user_id' => $current_user_id,
                 ':event_type' => 'edit_laboral_data',
@@ -235,7 +191,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
             ]);
 
             $pdo->commit();
-            
             $_SESSION['mensaje'] = [
                 'titulo' => '¡Éxito!',
                 'contenido' => 'Datos laborales actualizados correctamente.',
@@ -251,18 +206,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                 'contenido' => 'Hubo un error al actualizar los datos laborales: ' . $e->getMessage(),
                 'tipo' => 'danger'
             ];
-            // Para depuración:
             error_log('Error al actualizar datos laborales: ' . $e->getMessage());
         }
     } else {
-        // Si hay errores de validación, se almacenan en la sesión para mostrarlos
         $_SESSION['mensaje'] = [
             'titulo' => 'Error de Validación',
             'contenido' => implode('<br>', $errores),
             'tipo' => 'danger'
         ];
     }
-    // Redirigir para mostrar el mensaje de error/éxito
     header("Location: editdatos_laboral.php?id=" . $id_laboral);
     exit();
 }
@@ -277,45 +229,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-        }
-        .form-container-custom {
-            background: white;
-            padding: 2.5rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            max-width: 900px;
-            margin: 2rem auto;
-        }
-        .form-section-header {
-            background-color: #f0f2f5;
-            padding: 1rem 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 2rem;
-            border-left: 5px solid var(--secondary-color);
-        }
-        .form-section-header h2 {
-            margin-bottom: 0;
-            color: var(--primary-color);
-        }
-        .conditional-fields {
-            padding: 1rem;
-            border: 1px dashed #cccccc;
-            border-radius: 8px;
-            margin-top: 1rem;
-            background-color: #f9f9f9;
-        }
-        .form-check-label-custom {
-            margin-right: 15px;
-            margin-bottom: 10px;
-            padding: 8px 12px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            background-color: #fff;
-            display: inline-block;
-        }
+        :root { --primary-color: #2c3e50; --secondary-color: #3498db; }
+        .form-container-custom { background: white; padding: 2.5rem; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); max-width: 900px; margin: 2rem auto; }
+        .form-section-header { background-color: #f0f2f5; padding: 1rem 1.5rem; border-radius: 10px; margin-bottom: 2rem; border-left: 5px solid var(--secondary-color); }
+        .form-section-header h2 { margin-bottom: 0; color: var(--primary-color);}
+        .conditional-fields { padding: 1rem; border: 1px dashed #cccccc; border-radius: 8px; margin-top: 1rem; background-color: #f9f9f9;}
     </style>
 </head>
 <body>
@@ -329,14 +247,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                     <i class="bi bi-arrow-left me-2"></i>Volver a Gestión
                 </a>
             </div>
-
             <?php if(isset($_SESSION['mensaje'])): ?>
                 <div class="alert alert-<?= $_SESSION['mensaje']['tipo'] ?> alert-dismissible fade show" role="alert">
                     <div class="d-flex align-items-center">
                         <i class="bi <?= $_SESSION['mensaje']['tipo'] == 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill' ?> me-2"></i>
                         <div>
                             <h5 class="mb-0"><?= htmlspecialchars($_SESSION['mensaje']['titulo']) ?></h5>
-                            <p class="mb-0"><?= $_SESSION['mensaje']['contenido'] ?></p> <!-- No htmlspecialchars aquí porque el contenido ya puede tener <br> -->
+                            <p class="mb-0"><?= $_SESSION['mensaje']['contenido'] ?></p>
                         </div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -359,7 +276,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                 <div class="form-section-header mt-5">
                     <h2><i class="bi bi-briefcase-fill me-2"></i>Datos Laborales</h2>
                 </div>
-
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="fecha_ingreso" class="form-label">Fecha de Ingreso*:</label>
@@ -376,7 +292,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                         </select>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="id_tipo_personal" class="form-label">Tipo de Personal*:</label>
@@ -401,7 +316,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                         </select>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="id_cargo" class="form-label">Cargo*:</label>
@@ -426,7 +340,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                         </select>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="id_coordinacion" class="form-label">Coordinación*:</label>
@@ -436,8 +349,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                                 <option value="<?= htmlspecialchars($coord['id_coordinacion']) ?>" 
                                     data-departamento-id="<?= htmlspecialchars($coord['id_departamento']) ?>"
                                     <?= ($registro['id_coordinacion'] == $coord['id_coordinacion']) ? 'selected' : '' ?>
-                                    style="display: none;"
-                                >
+                                    style="display: none;">
                                     <?= htmlspecialchars($coord['nombre']) ?>
                                 </option>
                             <?php endforeach; ?>
@@ -445,50 +357,77 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                     </div>
                     <div class="col-md-6 mb-3">
                         <label for="ficha" class="form-label">Número de Ficha*:</label>
-                        <input type="text" class="form-control" id="ficha" name="ficha" 
-                               value="<?= htmlspecialchars($registro['ficha'] ?? '') ?>" 
-                               pattern="[A-Z0-9-]+" 
-                               title="Solo mayúsculas, números y guiones" 
+                        <input type="text" class="form-control" id="ficha" name="ficha"
+                               value="<?= htmlspecialchars($registro['ficha'] ?? '') ?>"
+                               pattern="[A-Z0-9-]+"
+                               title="Solo mayúsculas, números y guiones"
                                required>
                     </div>
                 </div>
-
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="sueldo" class="form-label">Sueldo Mensual (Bs)*:</label>
+                        <input type="number" class="form-control" id="sueldo" name="sueldo"
+                               value="<?= htmlspecialchars($registro['sueldo'] ?? '') ?>"
+                               min="0.01" step="0.01" required>
+                    </div>
+                </div>
                 <div class="mb-3">
                     <label for="correo_institucional" class="form-label">Correo Institucional*:</label>
-                    <input type="email" class="form-control" id="correo_institucional" name="correo_institucional" 
+                    <input type="email" class="form-control" id="correo_institucional" name="correo_institucional"
                            value="<?= htmlspecialchars($registro['correo_institucional'] ?? '') ?>" required>
                 </div>
-
                 <div class="mb-3">
                     <label for="descripcion_funciones" class="form-label">Descripción de Funciones*:</label>
                     <textarea class="form-control" id="descripcion_funciones" name="descripcion_funciones" rows="4" required><?= htmlspecialchars($registro['descripcion_funciones'] ?? '') ?></textarea>
                 </div>
 
+                <!-- SOLO Primas personalizadas -->
                 <div class="form-section-header mt-5">
-                    <h2><i class="bi bi-journal-check me-2"></i>Primas Asignadas</h2>
+                    <h2><i class="bi bi-journal-check me-2"></i>Primas Personalizadas Asignadas</h2>
                 </div>
                 <div class="mb-3 p-3 border rounded bg-light">
-                    <?php if (!empty($primas)): ?>
-                        <div class="row">
-                            <?php foreach($primas as $prima): ?>
-                                <div class="col-md-6 col-lg-4 mb-2">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" 
-                                               name="primas[]" 
-                                               value="<?= htmlspecialchars($prima['id_prima']) ?>" 
-                                               id="prima_<?= htmlspecialchars($prima['id_prima']) ?>"
-                                               <?= in_array($prima['id_prima'], $primas_asignadas) ? 'checked' : '' ?>>
-                                        <label class="form-check-label" for="prima_<?= htmlspecialchars($prima['id_prima']) ?>">
-                                            <?= htmlspecialchars($prima['nombre']) ?> 
-                                            (<?= number_format($prima['monto'], 2, ',', '.') ?> Bs)
-                                        </label>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
+                    <label class="form-label">Primas Personalizadas:</label>
+                    <div id="primas-manual-container">
+                        <?php
+                        if (!empty($primas_manual)) {
+                            foreach ($primas_manual as $i => $prima) {
+                        ?>
+                        <div class="row prima-row mb-2 align-items-center">
+                            <div class="col-md-5">
+                                <input type="text" name="primas_manual[<?= $i ?>][nombre]" class="form-control" placeholder="Nombre de la Prima" value="<?= htmlspecialchars($prima['nombre_prima']) ?>" required>
+                            </div>
+                            <div class="col-md-5">
+                                <input type="number" name="primas_manual[<?= $i ?>][monto]" class="form-control" placeholder="Monto (Bs)" value="<?= htmlspecialchars($prima['monto']) ?>" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="col-md-2 text-center">
+                                <button type="button" class="btn btn-danger btn-sm" onclick="eliminarPrimaManual(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
                         </div>
-                    <?php else: ?>
-                        <p class="text-muted">No hay primas disponibles para asignar.</p>
-                    <?php endif; ?>
+                        <?php
+                            }
+                        } else {
+                        ?>
+                        <div class="row prima-row mb-2 align-items-center">
+                            <div class="col-md-5">
+                                <input type="text" name="primas_manual[0][nombre]" class="form-control" placeholder="Nombre de la Prima" required>
+                            </div>
+                            <div class="col-md-5">
+                                <input type="number" name="primas_manual[0][monto]" class="form-control" placeholder="Monto (Bs)" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="col-md-2 text-center">
+                                <button type="button" class="btn btn-danger btn-sm" onclick="eliminarPrimaManual(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <?php } ?>
+                    </div>
+                    <button type="button" class="btn btn-outline-success mt-2" onclick="agregarPrimaManual()">
+                        <i class="bi bi-plus-circle"></i> Agregar otra prima personalizada
+                    </button>
                 </div>
 
                 <div class="form-section-header mt-5">
@@ -507,25 +446,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                         <label class="form-check-label" for="trabajo_anterior_no">No</label>
                     </div>
                 </div>
-
                 <div id="campos_experiencia_previa" class="conditional-fields" style="display: <?= ($registro['ha_trabajado_anteriormente'] == 'Sí') ? 'block' : 'none' ?>;">
                     <div class="mb-3">
                         <label for="nombre_empresa_anterior" class="form-label">Nombre de la Institución/Empresa:</label>
-                        <input type="text" class="form-control" id="nombre_empresa_anterior" name="nombre_empresa_anterior" 
+                        <input type="text" class="form-control" id="nombre_empresa_anterior" name="nombre_empresa_anterior"
                                value="<?= htmlspecialchars($registro['nombre_empresa_anterior'] ?? '') ?>"
                                <?= ($registro['ha_trabajado_anteriormente'] == 'No') ? 'disabled' : '' ?>>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="fecha_ingreso_anterior" class="form-label">Fecha de Ingreso:</label>
-                            <input type="date" class="form-control" id="fecha_ingreso_anterior" name="fecha_ingreso_anterior" 
-                                   value="<?= htmlspecialchars($registro['ano_ingreso_anterior'] ?? '') ?>" 
+                            <input type="date" class="form-control" id="fecha_ingreso_anterior" name="fecha_ingreso_anterior"
+                                   value="<?= htmlspecialchars($registro['ano_ingreso_anterior'] ?? '') ?>"
                                    max="<?= date('Y-m-d') ?>"
                                    <?= ($registro['ha_trabajado_anteriormente'] == 'No') ? 'disabled' : '' ?>>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="fecha_culminacion_anterior" class="form-label">Fecha de Culminación:</label>
-                            <input type="date" class="form-control" id="fecha_culminacion_anterior" name="fecha_culminacion_anterior" 
+                            <input type="date" class="form-control" id="fecha_culminacion_anterior" name="fecha_culminacion_anterior"
                                    value="<?= htmlspecialchars($registro['ano_culminacion_anterior'] ?? '') ?>"
                                    max="<?= date('Y-m-d') ?>"
                                    <?= ($registro['ha_trabajado_anteriormente'] == 'No') ? 'disabled' : '' ?>>
@@ -541,62 +479,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
             </form>
         </div>
     </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Data de coordinaciones para el JS
-        const coordinacionesData = <?= json_encode($coordinaciones_all) ?>;
+        function agregarPrimaManual() {
+            var primasContainer = document.getElementById('primas-manual-container');
+            var index = primasContainer.querySelectorAll('.prima-row').length;
+            var row = document.createElement('div');
+            row.className = 'row prima-row mb-2 align-items-center';
+            row.innerHTML = `
+                <div class="col-md-5">
+                    <input type="text" name="primas_manual[${index}][nombre]" class="form-control" placeholder="Nombre de la Prima" required>
+                </div>
+                <div class="col-md-5">
+                    <input type="number" name="primas_manual[${index}][monto]" class="form-control" placeholder="Monto (Bs)" min="0.01" step="0.01" required>
+                </div>
+                <div class="col-md-2 text-center">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="eliminarPrimaManual(this)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+            primasContainer.appendChild(row);
+        }
 
-        function filterCoordinaciones() {
-            const departamentoSelect = document.getElementById('id_departamento');
-            const coordinacionSelect = document.getElementById('id_coordinacion');
-            const selectedDepartamentoId = departamentoSelect.value;
-
-            // Ocultar todas las opciones y deseleccionar la actual
-            Array.from(coordinacionSelect.options).forEach(option => {
-                option.style.display = 'none';
-                option.selected = false;
-            });
-
-            // Mostrar solo las opciones que pertenecen al departamento seleccionado
-            let firstOptionDisplayed = false;
-            Array.from(coordinacionSelect.options).forEach(option => {
-                // Si es la opción "Seleccione..." o si el departamento de la opción coincide
-                if (option.value === "" || option.dataset.departamentoId === selectedDepartamentoId) {
-                    option.style.display = 'block';
-                    if (!firstOptionDisplayed && option.value !== "") { // Seleccionar la primera opción válida si no hay una ya seleccionada
-                        option.selected = true;
-                        firstOptionDisplayed = true;
-                    }
-                }
-            });
-
-            // Si la coordinación seleccionada actualmente no pertenece al nuevo departamento, deseleccionar
-            const currentCoordInRegistro = "<?= htmlspecialchars($registro['id_coordinacion']) ?>";
-            const currentSelectedCoordOption = coordinacionSelect.querySelector(`option[value="${currentCoordInRegistro}"]`);
-
-            if (currentSelectedCoordOption && currentSelectedCoordOption.dataset.departamentoId === selectedDepartamentoId) {
-                coordinacionSelect.value = currentCoordInRegistro;
-            } else if (!firstOptionDisplayed && selectedDepartamentoId !== "") {
-                // Si no se encontró la coordinación original y hay un departamento seleccionado, seleccionar la primera coordinación disponible
-                const firstAvailableOption = coordinacionSelect.querySelector('option[style="display: block;"]:not([value=""])');
-                if (firstAvailableOption) {
-                    firstAvailableOption.selected = true;
-                } else {
-                    coordinacionSelect.value = ""; // Si no hay coordinaciones para el departamento, no seleccionar nada
-                }
-            } else if (selectedDepartamentoId === "") {
-                 coordinacionSelect.value = ""; // Si no hay departamento seleccionado, no seleccionar nada
+        function eliminarPrimaManual(btn) {
+            var row = btn.closest('.prima-row');
+            var primasContainer = document.getElementById('primas-manual-container');
+            // Solo permitir eliminar si hay más de una prima
+            if (primasContainer.querySelectorAll('.prima-row').length > 1) {
+                row.parentNode.removeChild(row);
+            } else {
+                // Opcional: Si quieres alertar al usuario
+                alert('Debe haber al menos una prima personalizada.');
             }
         }
 
-
+        // Experiencia previa
         function toggleExperienciaPrevia(mostrar) {
             const camposExperiencia = document.getElementById('campos_experiencia_previa');
             const nombreEmpresa = document.getElementById('nombre_empresa_anterior');
             const fechaIngreso = document.getElementById('fecha_ingreso_anterior');
             const fechaCulminacion = document.getElementById('fecha_culminacion_anterior');
-
             if (mostrar) {
                 camposExperiencia.style.display = 'block';
                 nombreEmpresa.removeAttribute('disabled');
@@ -610,8 +533,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                 nombreEmpresa.setAttribute('disabled', 'disabled');
                 fechaIngreso.setAttribute('disabled', 'disabled');
                 fechaCulminacion.setAttribute('disabled', 'disabled');
-                // Opcional: Limpiar valores si se ocultan para evitar enviar datos residuales
-                nombreEmpresa.value = ''; 
+                nombreEmpresa.value = '';
                 fechaIngreso.value = '';
                 fechaCulminacion.value = '';
                 nombreEmpresa.removeAttribute('required');
@@ -619,25 +541,50 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['actualizar'])) {
                 fechaCulminacion.removeAttribute('required');
             }
         }
-
-        // Event listener para el cambio de departamento
+        // Coordinaciones
+        const coordinacionesData = <?= json_encode($coordinaciones_all) ?>;
+        function filterCoordinaciones() {
+            const departamentoSelect = document.getElementById('id_departamento');
+            const coordinacionSelect = document.getElementById('id_coordinacion');
+            const selectedDepartamentoId = departamentoSelect.value;
+            Array.from(coordinacionSelect.options).forEach(option => {
+                option.style.display = 'none';
+                option.selected = false;
+            });
+            let firstOptionDisplayed = false;
+            Array.from(coordinacionSelect.options).forEach(option => {
+                if (option.value === "" || option.dataset.departamentoId === selectedDepartamentoId) {
+                    option.style.display = 'block';
+                    if (!firstOptionDisplayed && option.value !== "") {
+                        option.selected = true;
+                        firstOptionDisplayed = true;
+                    }
+                }
+            });
+            const currentCoordInRegistro = "<?= htmlspecialchars($registro['id_coordinacion']) ?>";
+            const currentSelectedCoordOption = coordinacionSelect.querySelector(`option[value="${currentCoordInRegistro}"]`);
+            if (currentSelectedCoordOption && currentSelectedCoordOption.dataset.departamentoId === selectedDepartamentoId) {
+                coordinacionSelect.value = currentCoordInRegistro;
+            } else if (!firstOptionDisplayed && selectedDepartamentoId !== "") {
+                const firstAvailableOption = coordinacionSelect.querySelector('option[style="display: block;"]:not([value=""])');
+                if (firstAvailableOption) {
+                    firstAvailableOption.selected = true;
+                } else {
+                    coordinacionSelect.value = "";
+                }
+            } else if (selectedDepartamentoId === "") {
+                coordinacionSelect.value = "";
+            }
+        }
         document.getElementById('id_departamento').addEventListener('change', filterCoordinaciones);
-
-        // Al cargar la página, inicializar:
         document.addEventListener('DOMContentLoaded', function() {
-            // 1. Filtrar coordinaciones según el departamento ya seleccionado en el registro
             filterCoordinaciones();
-
-            // 2. Establecer el estado inicial de los campos de experiencia previa
             const trabajoAnteriorSi = document.getElementById('trabajo_anterior_si');
             toggleExperienciaPrevia(trabajoAnteriorSi.checked);
-
-            // 3. Seleccionar la coordinación correcta al cargar, si aplica
             const initialSelectedCoord = "<?= htmlspecialchars($registro['id_coordinacion']) ?>";
             const coordinacionSelect = document.getElementById('id_coordinacion');
             if (initialSelectedCoord) {
                 coordinacionSelect.value = initialSelectedCoord;
-                // Asegurarse de que la opción sea visible si ya estaba seleccionada
                 const selectedOption = coordinacionSelect.querySelector(`option[value="${initialSelectedCoord}"]`);
                 if (selectedOption) {
                     selectedOption.style.display = 'block';
